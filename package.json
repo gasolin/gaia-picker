@@ -1,0 +1,36 @@
+{
+  "name": "gaia-picker",
+  "homepage": "https://github.com/gaia-components/gaia-picker",
+  "license": "ISC",
+  "main": "gaia-picker.js",
+  "directories": {
+    "example": "examples",
+    "test": "test"
+  },
+  "devDependencies": {
+    "bower": "^1.3.5",
+    "browserify": "^5.11.2",
+    "karma": "^0.12.16",
+    "karma-firefox-launcher": "^0.1.3",
+    "karma-mocha": "^0.1.3",
+    "karma-sinon-chai": "^0.1.6",
+    "mozilla-download": "^0.4.3"
+  },
+  "scripts": {
+    "install": "bower install",
+    "test": "./node_modules/karma/bin/karma start test/karma.conf.js --single-run",
+    "test-dev": "./node_modules/karma/bin/karma start test/karma.conf.js",
+    "build": "mkdir -p dist && browserify gaia-picker.js --outfile ./dist/gaia-picker.js --standalone GaiaHeader"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git://github.com/gaia-components/gaia-picker.git"
+  },
+  "bugs": {
+    "url": "https://github.com/gaia-components/gaia-picker/issues"
+  },
+  "browser": {
+    "gaia-icons": "./bower_components/gaia-icons/gaia-icons.js",
+    "pressed": "./bower_components/pressed/pressed.js"
+  }
+}
