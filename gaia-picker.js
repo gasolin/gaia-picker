@@ -45,13 +45,13 @@ proto.createdCallback = function() {
 
   this.shadowStyleHack();
 
-  this.scroll = new Scroll({
+  window.scroll = this.scroll = new Scroll({
     el: this.els.list,
     snap: true,
     itemHeight: this.children[0].clientHeight
   });
 
-  this.els.list.addEventListener('tap', this.onListTap.bind(this));
+  // this.els.list.addEventListener('tap', this.onListTap.bind(this));
 };
 
 proto.shadowStyleHack = function() {
@@ -109,7 +109,7 @@ var template = `
   top: 50%; left: 0;
   width: 100%;
   margin-top: -25px;
-  padding-bottom: 150px;
+  padding-bottom: 350px;
   // background: red;
 }
 
@@ -172,6 +172,8 @@ function Scroll(options) {
   this.scrollTop = 0;
   this.last = {};
 
+  this.history = [];
+
   // Bind context
   this.onPointerDown = this.onPointerDown.bind(this);
   this.onPointerMove = this.onPointerMove.bind(this);
@@ -183,7 +185,15 @@ function Scroll(options) {
 
 Scroll.prototype.onPointerDown = function(e) {
   this.e = this.point = null
+
+  var self = this;
   this.updatePoint(e);
+  if (this.frame) { return; }
+
+  this.frame = raf(function() {
+    self.frame = null;
+    self.pan();
+  });
 
   this.start = e;
   this.monitorSpeed = true;
@@ -228,10 +238,21 @@ Scroll.prototype.onPointerUp = function(e) {
     }.bind(this));
   }
 
+  console.log('speed', this.speed);
+
+  var distance = this.speed * 90;
+  var endScrollTop = this.scrollTop + distance;
+  var snappedScrollTop = this.itemHeight * Math.round(endScrollTop / this.itemHeight);
+
+  // console.log('current scrollTop', this.scrollTop);
+  // console.log('natural scrollTop', endScrollTop);
+  // console.log('snapped scrollTop', snappedScrollTop);
+
 
   this.scrollTo({
-    delta: this.speed * 100,
-  }, this.snapToClosest.bind(this));
+    scrollTop: snappedScrollTop,
+    // tolerance: 1
+  });
 
   this.start = null;
 
@@ -243,40 +264,106 @@ Scroll.prototype.pan = function() {
   caf(this.raf);
 
   var delta = this.last.point.clientY - this.point.clientY;
-  this.setScroll(this.scrollTop - delta);
+  this.setScroll(this.scrollTop + delta);
   this.draw();
 };
 
 Scroll.prototype.setScroll = function(value) {
-  var clamped = Math.max(Math.min(0, value), -this.scrollHeight);
+  var clamped = Math.min(Math.max(0, value), this.scrollHeight);
+  // console.log('setScroll', value);
   this.scrollTop = clamped;
   return clamped !== value;
 };
 
 Scroll.prototype.draw = function() {
-  this.el.style.transform = 'translateY(' + this.scrollTop + 'px)';
+  this.el.style.transform = 'translateY(-' + this.scrollTop + 'px)';
 }
 
 Scroll.prototype.scrollTo = function(options, done) {
   caf(this.raf);
+  caf(this.frame);
+  this.frame = null;
 
   var timeConstant = options.time || 16;
   var distance = options.delta !== undefined ? options.delta : (this.scrollTop - options.scrollTop);
+  // var tolerance = options.tolerance || 0.25;
   var self = this;
 
+// console.log('distance', distance);
+
+
   this.raf = raf(function loop() {
-    var delta = distance / timeConstant;
-    var clamped = self.setScroll(self.scrollTop - delta)
+    var delta = (distance / timeConstant);
+    var scrollTop = self.scrollTop - delta;
+
+
+    if (delta < 0.85) {
+      timeConstant *= 0.94;
+    }
+
+    var clamped = self.setScroll(scrollTop)
     distance -= delta;
+
     self.draw();
 
-    if (!clamped && Math.abs(delta) > 0.18) {
+    if (!clamped && Math.abs(distance) > 0.2) {
       self.raf = raf(loop);
-    } else if (done) {
-      done();
+    } else {
+      // console.log('travelled', travelled);
+      if (done) done();
     }
   });
 }
+
+// Scroll.prototype.scrollTo = function(options, done) {
+//   caf(this.raf);
+
+//   var timeConstant = options.time || 16;
+//   var distance = options.delta !== undefined ? options.delta : (this.scrollTop - options.scrollTop);
+//   var tolerance = options.tolerance || 0.25;
+//   var self = this;
+
+//   this.raf = raf(function loop() {
+//     var delta = (distance / timeConstant).toFixed(2);
+//     var clamped = self.setScroll(self.scrollTop - delta)
+//     distance -= delta;
+//     self.draw();
+
+//     if (!clamped && Math.abs(distance) > 0.25) {
+//       self.raf = raf(loop);
+//     } else {
+//       console.log('delta', delta, self.scrollTop);
+//       if (done) done();
+//     }
+//   });
+// }
+
+// Scroll.prototype.scrollTo = function(options) {
+//   caf(this.raf);
+
+//   var time = 400;
+//   var start = this.scrollTop
+//   var end = options.scrollTop
+//   var distance = start - end;
+//   var timeStart = Date.now();
+//   var travelled;
+
+//   var self = this;
+
+//   this.raf = raf(function loop() {
+//     var elapsed = Math.min((Date.now() - timeStart) / time, 1);
+
+//     travelled = distance * elapsed;
+
+//     self.setScroll(start - travelled)
+//     self.draw();
+
+//     // console.log(travelled);
+//     if (elapsed < 1) {
+//       self.raf = raf(loop);
+//     }
+//   });
+// }
 
 Scroll.prototype.updateSpeed = function() {
   if (!this.point) return;
@@ -284,32 +371,28 @@ Scroll.prototype.updateSpeed = function() {
   var last = this.last.speedCheck || 0;
   var distance =  last - this.point.clientY;
   var time = this.e.timeStamp - this.last.e.timeStamp;
-  var speed = time > 2 ? distance / time : 0;
+  var speed = distance / time;
+  var self = this;
 
   this.last.speed = this.speed || 0;
   this.last.speedCheck = this.point.clientY;
   this.speed = speed;
 
   if (this.monitorSpeed) {
-    setTimeout(this.updateSpeed, 50);
+    raf(function() {
+      raf(self.updateSpeed);
+    });
   }
 }
 
 Scroll.prototype.scrollToElement = function(el) {
-  this.scrollTo({ scrollTop: -el.offsetTop, time: 10 });
+  this.scrollTo({ scrollTop: -el.offsetTop, time: 4 });
 };
 
 Scroll.prototype.snapToClosest = function() {
-  var offset = this.scrollTop % this.itemHeight;
-  var items = this.scrollTop / this.itemHeight;
   var snappedOffset = this.itemHeight * Math.round(this.scrollTop / this.itemHeight);
-  this.scrollTo({ scrollTop: snappedOffset, time: 5 });
+  this.scrollTo({ scrollTop: snappedOffset, time: 5, tolerance: 0.5 });
 }
-
-Scroll.prototype.snap = function(y) {
-
-}
-
 
 function getDistance(a, b) {
   var xs = 0;
