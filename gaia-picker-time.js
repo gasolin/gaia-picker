@@ -43,28 +43,55 @@ proto.createdCallback = function() {
     }
   };
 
-  // Use the navigator property if it's defined
-  this.is12hFormat = 'mozHour12' in navigator ? navigator.mozHour12 : true;
-  this.shadowStyleHack();
-  this.populate();
+  // Set the format to populate the pickers
+  this.format = this.getAttribute('format') || navigator.mozHour12 ? 12 : 24;
 
+  this.shadowStyleHack();
   addEventListener('load', this.setup.bind(this));
+};
+
+proto.attributeChangedCallback = function(attr, from, to) {
+  if (this.attrs[attr]) { this[attr] = to; }
 };
 
 proto.setup = function() {
   var now = new Date();
-  this.hours = this.getAttribute('hours');
+  this.hours = this.getAttribute('hours') || now.getHours();
   this.minutes = this.getAttribute('minutes') || now.getMinutes();
 };
 
 proto.populate = function() {
-  var startHour = this.is12hFormat ? 1 : 0;
-  var endHour = this.is12hFormat ? (startHour + 12) : (startHour + 12 * 2);
+  var startHour = this.is12 ? 1 : 0;
+  var endHour = this.is12 ? (startHour + 12) : (startHour + 12 * 2);
 
-  this.els.pickers.hour.fill(this.setDisplayedText(startHour, endHour));
-  this.els.pickers.minute.fill(this.setDisplayedText(0, 60, function(value) {
-    return (value < 10) ? '0' + value : value;
+  this.els.pickers.hour.fill(createList(startHour, endHour));
+  this.els.pickers.minute.fill(createList(0, 60, function(value) {
+    return value < 10 ? '0' + value : value;
   }));
+}
+
+proto.getTimeValue = function() {
+  return (this.hours < 10 ? '0' : '') + this.hours + ':' + this.minutes;
+}
+
+proto.formatHours = function(hours) {
+  hours = Number(hours);
+  if (!this.is12) { return hours; }
+  var hour = (hours % 12);
+  return (hour === 0 ? 12 : hour) -1;
+}
+
+/**
+ * It's useful to have attributes duplicated
+ * on a node inside the shadow-dom so that
+ * we can use them for style-hooks.
+ *
+ * @param {String} name
+ * @param {String} value
+ */
+proto.setAttribute = function(name, value) {
+  this.els.inner.setAttribute.call(this, name, value);
+  this.els.inner.setAttribute(name, value);
 }
 
 proto.shadowStyleHack = function() {
@@ -75,23 +102,18 @@ proto.shadowStyleHack = function() {
   this.appendChild(style);
 };
 
-proto.setDisplayedText = function(min, max, format) {
-  var list = [];
-  for (var i = min; i < max; ++i) {
-    list.push(format ? format(i) : i);
-  }
-  return list;
-};
-
 proto.attrs = {
   hours: {
     get: function() {
       return this._hours;
     },
+
     set: function(value) {
-      if (!value) { return; }
-      value = Number(value);
-      this.els.pickers.hour.select(value - 1)
+      if (!value || value === this._hours) { return; }
+      var index = this.formatHours(value);
+      var ampm = value >= 12 ? 1 : 0;
+      this.els.pickers.hour.select(index);
+      this.els.pickers.ampm.select(ampm)
       this._hours = value;
     }
   },
@@ -100,12 +122,25 @@ proto.attrs = {
     get: function() {
       return this._minutes;
     },
+
     set: function(value) {
-      if (!value) { return; }
+      if (!value || value === this._minutes) { return; }
       value = Number(value);
       this.els.pickers.minute.select(value)
       this._minutes = value;
-      console.log(value);
+    }
+  },
+
+  format: {
+    get: function() {
+      return this._format;
+    },
+
+    set: function(value) {
+      this.is12 = value === 12;
+      this.populate();
+      this.setAttribute('format', value);
+      this._format = value;
     }
   }
 }
@@ -123,15 +158,16 @@ var template = `
 }
 
 .inner {
+  display: flex;
   height: 100%;
 }
 
 gaia-picker {
-  box-sizing: border-box;
-  float: left;
-  height: 100%;
-  width: 33.33%;
-  border-right: solid 1px var(--border-color);
+  flex: 1;
+}
+
+[format='24'] .ampm {
+  display: none;
 }
 
 </style>
@@ -152,6 +188,14 @@ if (!hasShadowCSS) {
   template = template
     .replace('::content', 'gaia-picker-time.-content', 'g')
     .replace(':host', 'gaia-picker-time.-host', 'g');
+}
+
+function createList(min, max, format) {
+  var list = [];
+  for (var i = min; i < max; ++i) {
+    list.push(format ? format(i) : i);
+  }
+  return list;
 }
 
 /**

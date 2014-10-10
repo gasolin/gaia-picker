@@ -90,6 +90,7 @@ proto.select = function(param) {
   this.clear();
   el.classList.add('selected');
   this.scroll.scrollToElement(el, { silent: true });
+  this.dispatch('change');
   this.selected = el;
 };
 
@@ -101,6 +102,10 @@ proto.clear = function() {
 
 proto.value = function() {
   return this.selected.textContent;
+}
+
+proto.dispatch = function(name, detail) {
+  this.dispatchEvent(new CustomEvent(name, { detail: detail || {} }))
 }
 
 proto.fill = function(list) {
@@ -123,7 +128,7 @@ var template = `
 <style>
 
 :host {
-  display: block;
+  display: flex;
   position: relative;
   box-shadow: inset 1px 1px 2px rgba(0,0,0,0.2);
   overflow: hidden;
@@ -143,7 +148,7 @@ var template = `
 }
 
 .gaia-picker-inner {
-  height: 100%;
+
 }
 
 /** List
