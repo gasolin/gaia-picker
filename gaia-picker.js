@@ -6,7 +6,7 @@
  * Dependencies
  */
 
-var scroll = require('snap-scroll');
+var Scroll = require('snap-scroll');
 
 /**
  * Detects presence of shadow-dom
@@ -39,19 +39,27 @@ proto.createdCallback = function() {
 
   // Get els
   this.els = {
-    inner: this.shadowRoot.querySelector('.inner'),
-    list: this.shadowRoot.querySelector('.list')
+    inner: this.shadowRoot.querySelector('.gaia-picker-inner'),
+    list: this.shadowRoot.querySelector('.list'),
+    items: this.querySelectorAll('li')
   };
 
   this.shadowStyleHack();
 
-  window.scroll = this.scroll = new Scroll({
+  this.scroll = new Scroll({
     el: this.els.list,
     snap: true,
-    itemHeight: this.children[0].clientHeight
+    itemHeight: 50
   });
 
-  // this.els.list.addEventListener('tap', this.onListTap.bind(this));
+  addEventListener('load', function() {
+    this.select(0);
+  }.bind(this));
+
+  this.els.list.addEventListener('scrolling', this.onScrolling.bind(this));
+  this.els.list.addEventListener('snapping', this.onSnapped.bind(this));
+  this.els.list.addEventListener('snapped', this.onSnapped.bind(this));
+  this.els.list.addEventListener('tap', this.onListTap.bind(this));
 };
 
 proto.shadowStyleHack = function() {
@@ -60,13 +68,51 @@ proto.shadowStyleHack = function() {
   this.classList.add('-content', '-host');
   style.setAttribute('scoped', '');
   this.appendChild(style);
+  this._style = style;
 };
 
 proto.onListTap = function(e) {
-  console.log(e.detail.target);
-
   var item = this.getChild(e.detail.target);
-  this.scroll.scrollToElement(item);
+  this.select(item);
+};
+
+proto.onScrolling = function(e) {
+  this.clear();
+};
+
+proto.onSnapped = function(e) {
+  this.select(e.detail.index);
+};
+
+proto.select = function(param) {
+  var el = typeof param === 'number' ? this.children[param] : param;
+  if (!el) { return; }
+  this.clear();
+  el.classList.add('selected');
+  this.scroll.scrollToElement(el, { silent: true });
+  this.selected = el;
+};
+
+proto.clear = function() {
+  if (!this.selected) return;
+  this.selected.classList.remove('selected');
+  this.selected = null;
+};
+
+proto.value = function() {
+  return this.selected.textContent;
+}
+
+proto.fill = function(list) {
+  this._style.remove();
+
+  list.forEach(function(item) {
+    var el = document.createElement('li');
+    el.textContent = item;
+    this.appendChild(el);
+  }, this);
+
+  this.appendChild(this._style);
 };
 
 proto.getChild = function(el) {
@@ -96,9 +142,8 @@ var template = `
   background: var(--background-plus);
 }
 
-.inner {
+.gaia-picker-inner {
   height: 100%;
-  // margin-top: -25px;
 }
 
 /** List
@@ -110,7 +155,6 @@ var template = `
   width: 100%;
   margin-top: -25px;
   padding-bottom: 350px;
-  // background: red;
 }
 
 /** List Items
@@ -121,21 +165,26 @@ var template = `
   height: 50px;
   padding: 0 16px;
   font-size: 18px;
+  font-weight: normal;
   line-height: 50px;
+  text-align: center;
+  list-style-type: none;
+  transition: transform 140ms linear;
+  cursor: pointer;
 }
 
-::content li:after {
-  content: '';
-  position: absolute;
-  bottom: 0; left: 0;
-  width: 100%;
-  height: 1px;
-  background: var(--border-color);
+/**
+ * .selected
+ */
+
+::content li.selected {
+  color: var(--highlight-color);
+  transform: scale(1.5);
 }
 
 </style>
 
-<div class="inner">
+<div class="gaia-picker-inner">
   <div class="list"><content></content></div>
 </div>`;
 
@@ -144,267 +193,8 @@ var template = `
 // to use the shim classes instead.
 if (!hasShadowCSS) {
   template = template
-    .replace('::content', '.-content', 'g')
-    .replace(':host', '.-host', 'g');
-}
-
-/**
- * Pointer event abstraction to make
- * it work for touch and mouse.
- *
- * @type {Object}
- */
-var pointer = [
-  { down: 'touchstart', up: 'touchend', move: 'touchmove' },
-  { down: 'mousedown', up: 'mouseup', move: 'mousemove' }
-]['ontouchstart' in window ? 0 : 1];
-
-
-var raf = requestAnimationFrame;
-var caf = cancelAnimationFrame;
-
-function Scroll(options) {
-  this.snap = options.snap;
-  this.el = options.el;
-  this.containerHeight = this.el.parentNode.clientHeight;
-  this.scrollHeight = this.el.clientHeight - this.containerHeight;
-  this.itemHeight = options.itemHeight;
-  this.scrollTop = 0;
-  this.last = {};
-
-  this.history = [];
-
-  // Bind context
-  this.onPointerDown = this.onPointerDown.bind(this);
-  this.onPointerMove = this.onPointerMove.bind(this);
-  this.onPointerUp = this.onPointerUp.bind(this);
-  this.updateSpeed = this.updateSpeed.bind(this);
-
-  this.el.addEventListener(pointer.down, this.onPointerDown);
-}
-
-Scroll.prototype.onPointerDown = function(e) {
-  this.e = this.point = null
-
-  var self = this;
-  this.updatePoint(e);
-  if (this.frame) { return; }
-
-  this.frame = raf(function() {
-    self.frame = null;
-    self.pan();
-  });
-
-  this.start = e;
-  this.monitorSpeed = true;
-  this.updateSpeed();
-
-  addEventListener(pointer.move, this.onPointerMove);
-  addEventListener(pointer.up, this.onPointerUp);
-}
-
-Scroll.prototype.updatePoint = function(e) {
-  var point = e.touches ? e.touches[0] : e;
-  this.last.point = this.point || point;
-  this.last.e = this.e || e;
-  this.point = point;
-  this.e = e;
-}
-
-Scroll.prototype.onPointerMove = function(e) {
-  caf(this.raf);
-
-  var self = this;
-  this.updatePoint(e);
-  if (this.frame) { return; }
-
-  this.frame = raf(function() {
-    self.frame = null;
-    self.pan();
-  });
-}
-
-Scroll.prototype.onPointerUp = function(e) {
-  this.monitorSpeed = false;
-
-
-  var tapped = (e.timeStamp - this.start.timeStamp) < 180;
-
-  if (tapped) {
-    setTimeout(function() {
-      this.el.dispatchEvent(new CustomEvent('tap', {
-        detail: { target: e.target }
-      }));
-    }.bind(this));
-  }
-
-  console.log('speed', this.speed);
-
-  var distance = this.speed * 90;
-  var endScrollTop = this.scrollTop + distance;
-  var snappedScrollTop = this.itemHeight * Math.round(endScrollTop / this.itemHeight);
-
-  // console.log('current scrollTop', this.scrollTop);
-  // console.log('natural scrollTop', endScrollTop);
-  // console.log('snapped scrollTop', snappedScrollTop);
-
-
-  this.scrollTo({
-    scrollTop: snappedScrollTop,
-    // tolerance: 1
-  });
-
-  this.start = null;
-
-  removeEventListener(pointer.up, this.onPointerUp);
-  removeEventListener(pointer.move, this.onPointerMove);
-}
-
-Scroll.prototype.pan = function() {
-  caf(this.raf);
-
-  var delta = this.last.point.clientY - this.point.clientY;
-  this.setScroll(this.scrollTop + delta);
-  this.draw();
-};
-
-Scroll.prototype.setScroll = function(value) {
-  var clamped = Math.min(Math.max(0, value), this.scrollHeight);
-  // console.log('setScroll', value);
-  this.scrollTop = clamped;
-  return clamped !== value;
-};
-
-Scroll.prototype.draw = function() {
-  this.el.style.transform = 'translateY(-' + this.scrollTop + 'px)';
-}
-
-Scroll.prototype.scrollTo = function(options, done) {
-  caf(this.raf);
-  caf(this.frame);
-  this.frame = null;
-
-  var timeConstant = options.time || 16;
-  var distance = options.delta !== undefined ? options.delta : (this.scrollTop - options.scrollTop);
-  // var tolerance = options.tolerance || 0.25;
-  var self = this;
-
-// console.log('distance', distance);
-
-
-  this.raf = raf(function loop() {
-    var delta = (distance / timeConstant);
-    var scrollTop = self.scrollTop - delta;
-
-
-    if (delta < 0.85) {
-      timeConstant *= 0.94;
-    }
-
-    var clamped = self.setScroll(scrollTop)
-    distance -= delta;
-
-    self.draw();
-
-    if (!clamped && Math.abs(distance) > 0.2) {
-      self.raf = raf(loop);
-    } else {
-      // console.log('travelled', travelled);
-      if (done) done();
-    }
-  });
-}
-
-// Scroll.prototype.scrollTo = function(options, done) {
-//   caf(this.raf);
-
-//   var timeConstant = options.time || 16;
-//   var distance = options.delta !== undefined ? options.delta : (this.scrollTop - options.scrollTop);
-//   var tolerance = options.tolerance || 0.25;
-//   var self = this;
-
-//   this.raf = raf(function loop() {
-//     var delta = (distance / timeConstant).toFixed(2);
-//     var clamped = self.setScroll(self.scrollTop - delta)
-//     distance -= delta;
-//     self.draw();
-
-//     if (!clamped && Math.abs(distance) > 0.25) {
-//       self.raf = raf(loop);
-//     } else {
-//       console.log('delta', delta, self.scrollTop);
-//       if (done) done();
-//     }
-//   });
-// }
-
-// Scroll.prototype.scrollTo = function(options) {
-//   caf(this.raf);
-
-//   var time = 400;
-//   var start = this.scrollTop
-//   var end = options.scrollTop
-//   var distance = start - end;
-//   var timeStart = Date.now();
-//   var travelled;
-
-//   var self = this;
-
-//   this.raf = raf(function loop() {
-//     var elapsed = Math.min((Date.now() - timeStart) / time, 1);
-
-//     travelled = distance * elapsed;
-
-//     self.setScroll(start - travelled)
-//     self.draw();
-
-//     // console.log(travelled);
-//     if (elapsed < 1) {
-//       self.raf = raf(loop);
-//     }
-//   });
-// }
-
-Scroll.prototype.updateSpeed = function() {
-  if (!this.point) return;
-
-  var last = this.last.speedCheck || 0;
-  var distance =  last - this.point.clientY;
-  var time = this.e.timeStamp - this.last.e.timeStamp;
-  var speed = distance / time;
-  var self = this;
-
-  this.last.speed = this.speed || 0;
-  this.last.speedCheck = this.point.clientY;
-  this.speed = speed;
-
-  if (this.monitorSpeed) {
-    raf(function() {
-      raf(self.updateSpeed);
-    });
-  }
-}
-
-Scroll.prototype.scrollToElement = function(el) {
-  this.scrollTo({ scrollTop: -el.offsetTop, time: 4 });
-};
-
-Scroll.prototype.snapToClosest = function() {
-  var snappedOffset = this.itemHeight * Math.round(this.scrollTop / this.itemHeight);
-  this.scrollTo({ scrollTop: snappedOffset, time: 5, tolerance: 0.5 });
-}
-
-function getDistance(a, b) {
-  var xs = 0;
-  var ys = 0;
-
-  xs = b.clientX - a.clientX;
-  xs = xs * xs;
-
-  ys = b.clientY - a.clientY;
-  ys = ys * ys;
-
-  return Math.sqrt(xs + ys);
+    .replace('::content', 'gaia-picker.-content', 'g')
+    .replace(':host', 'gaia-picker.-host', 'g');
 }
 
 // Register and return the constructor
@@ -415,4 +205,4 @@ module.exports.proto = proto;
 });})(typeof define=='function'&&define.amd?define
 :(function(n,w){'use strict';return typeof module=='object'?function(c){
 c(require,exports,module);}:function(c){var m={exports:{}};c(function(n){
-return w[n];},m.exports,m);w[n]=m.exports;};})('gaia-header',this));
+return w[n];},m.exports,m);w[n]=m.exports;};})('gaia-picker',this));
