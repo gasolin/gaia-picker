@@ -1,4 +1,4 @@
-;(function(define){define(function(require,exports,module){
+;(function(define){'use strict';define(function(require,exports,module){
 /*jshint esnext:true*/
 /*shint node:true*/
 
@@ -16,11 +16,25 @@ var hasShadowCSS = (function() {
 })();
 
 /**
+ * Simple debug logger
+ *
+ * @param  {String} value
+ */
+var debug = !localStorage.debug ? function() {} : function() {
+  arguments[0] = '[gaia-picker-time] ' + arguments[0];
+  console.log.apply(console, arguments);
+};
+
+/**
  * Element prototype, extends from HTMLElement
  *
  * @type {Object}
  */
 var proto = Object.create(HTMLElement.prototype);
+
+var on = function(el, name, fn, ctx) {
+  el.addEventListener(name, fn.bind(ctx));
+};
 
 /**
  * Called when the element is first created.
@@ -31,55 +45,133 @@ var proto = Object.create(HTMLElement.prototype);
  * @private
  */
 proto.createdCallback = function() {
-  this.createShadowRoot().innerHTML = template;
+  var now = new Date();
+
+  this.createShadowRoot();
+  this.shadowRoot.host = this; // Remove once .host is in platform
+  this.shadowRoot.innerHTML = template;
+  this.shadowStyleHack();
 
   // Get els
   this.els = {
     inner: this.shadowRoot.querySelector('.inner'),
     pickers: {
-      hour: this.shadowRoot.querySelector('.hour'),
-      minute: this.shadowRoot.querySelector('.minute'),
+      hours: this.shadowRoot.querySelector('.hours'),
+      minutes: this.shadowRoot.querySelector('.minutes'),
       ampm: this.shadowRoot.querySelector('.ampm')
     }
   };
 
-  // Set the format to populate the pickers
-  this.format = this.getAttribute('format') || navigator.mozHour12 ? 12 : 24;
+  this.setPickerHeights();
+  this.format = this.getAttribute('format') || (navigator.mozHour12 ? '12hr' : '24hr');
+  this.minutes = this.getAttribute('minutes') || now.getMinutes();
+  this.hours = this.getAttribute('hours') || now.getHours();
 
-  this.shadowStyleHack();
-  addEventListener('load', this.setup.bind(this));
+  this.addListeners();
 };
 
 proto.attributeChangedCallback = function(attr, from, to) {
   if (this.attrs[attr]) { this[attr] = to; }
 };
 
-proto.setup = function() {
-  var now = new Date();
-  this.hours = this.getAttribute('hours') || now.getHours();
-  this.minutes = this.getAttribute('minutes') || now.getMinutes();
+proto.addListeners = function() {
+  var pickers = this.els.pickers;
+  on(pickers.minutes, 'changed', this.onMinutesChanged, this);
+  on(pickers.hours, 'changed', this.onHoursChanged, this);
+  on(pickers.ampm, 'changed', this.onAmPmChanged, this);
 };
 
+proto.onHoursChanged = function(e) {
+  this.hours = this.normalizeHours(e.detail.value);
+};
+
+proto.onMinutesChanged = function(e) {
+  this.minutes = e.detail.value;
+};
+
+proto.onAmPmChanged = function(e) {
+  if (!e.detail.value) { return; }
+  this.ampm = e.detail.value === 'PM' ? 1 : 0;
+  this.hours = this.normalizeHours(this.hours);
+};
+
+proto.setPickerHeights = function() {
+  var height = Number(this.getAttribute('height'));
+  if (!height) { return; }
+  this.els.pickers.minutes.height = height;
+  this.els.pickers.hours.height = height;
+  this.els.pickers.ampm.height = height;
+};
+
+/**
+ * Populate the hour and minute
+ * pickers based on the current
+ * format.
+ *
+ * @private
+ */
 proto.populate = function() {
   var startHour = this.is12 ? 1 : 0;
   var endHour = this.is12 ? (startHour + 12) : (startHour + 12 * 2);
-
-  this.els.pickers.hour.fill(createList(startHour, endHour));
-  this.els.pickers.minute.fill(createList(0, 60, function(value) {
+  this.els.pickers.hours.fill(createList(startHour, endHour));
+  this.els.pickers.minutes.fill(createList(0, 60, function(value) {
     return value < 10 ? '0' + value : value;
   }));
-}
+};
 
+/**
+ * Returns a zero padded, human
+ * readable time string in 24hr
+ * format.
+ *
+ * @return {String}
+ * @public
+ */
 proto.getTimeValue = function() {
   return (this.hours < 10 ? '0' : '') + this.hours + ':' + this.minutes;
-}
+};
 
-proto.formatHours = function(hours) {
+/**
+ * Converts given number of hours
+ * to 24hr format based on the
+ * ampm value.
+ *
+ * @param  {String|Number} hours
+ * @return {Number}
+ * @private
+ */
+proto.normalizeHours = function(hours) {
   hours = Number(hours);
   if (!this.is12) { return hours; }
-  var hour = (hours % 12);
-  return (hour === 0 ? 12 : hour) -1;
-}
+  var offset = hours % 12;
+  hours = this.ampm ? offset + 12 : offset;
+  return hours === 24 ? 0 : hours;
+};
+
+/**
+ * Calulate the correct hour
+ * index when in 12hr format.
+ *
+ * Example:
+ *
+ *   // 12hr
+ *   this.hourIndex(1); => 0
+ *   this.hourIndex(0); => 11
+ *
+ *   // 24hr (noop)
+ *   this.hoursIndex(23); => 23
+ *   this.hoursIndex(0); => 0
+ *
+ * @param  {Number|String} hours
+ * @return {Number}
+ * @private
+ */
+proto.hourIndex = function(hours) {
+  hours = Number(hours);
+  if (!this.is12) { return hours; }
+  var hour = hours % 12;
+  return (hour === 0 ? 12 : hour) - 1;
+};
 
 /**
  * It's useful to have attributes duplicated
@@ -88,11 +180,12 @@ proto.formatHours = function(hours) {
  *
  * @param {String} name
  * @param {String} value
+ * @public
  */
 proto.setAttribute = function(name, value) {
   this.els.inner.setAttribute.call(this, name, value);
   this.els.inner.setAttribute(name, value);
-}
+};
 
 proto.shadowStyleHack = function() {
   if (hasShadowCSS) { return; }
@@ -104,46 +197,45 @@ proto.shadowStyleHack = function() {
 
 proto.attrs = {
   hours: {
-    get: function() {
-      return this._hours;
-    },
-
+    get: function() { return this._hours; },
     set: function(value) {
-      if (!value || value === this._hours) { return; }
-      var index = this.formatHours(value);
-      var ampm = value >= 12 ? 1 : 0;
-      this.els.pickers.hour.select(index);
-      this.els.pickers.ampm.select(ampm)
+      debug('set hours: %s', value, this.hours);
+      value = Number(value);
+      if (value === this.hours) { return; }
+
+      this.ampm = value >= 12 ? 1 : 0;
       this._hours = value;
+
+      // Update pickers last
+      this.setAttribute('hours', value);
+      this.els.pickers.hours.select(this.hourIndex(value));
+      this.els.pickers.ampm.select(this.ampm);
     }
   },
 
   minutes: {
-    get: function() {
-      return this._minutes;
-    },
-
+    get: function() { return this._minutes; },
     set: function(value) {
-      if (!value || value === this._minutes) { return; }
+      debug('set minutes: %s', value);
       value = Number(value);
-      this.els.pickers.minute.select(value)
+      if (value === this.minutes) { return; }
+      this.els.pickers.minutes.select(value);
+      this.setAttribute('minutes', value);
       this._minutes = value;
     }
   },
 
   format: {
-    get: function() {
-      return this._format;
-    },
-
+    get: function() { return this._format; },
     set: function(value) {
-      this.is12 = value === 12;
+      if (value == this.format) { return; }
+      this.is12 = value === '12hr';
       this.populate();
       this.setAttribute('format', value);
       this._format = value;
     }
   }
-}
+};
 
 Object.defineProperties(proto, proto.attrs);
 
@@ -166,15 +258,25 @@ gaia-picker {
   flex: 1;
 }
 
-[format='24'] .ampm {
+gaia-picker:not(:first-child):after {
+  content: '';
+  position: absolute;
+  left: 0; top: 0;
+  z-index: -1;
+  width: 1px;
+  height: 100%;
+  background: var(--border-color);
+}
+
+[format='24hr'] .ampm {
   display: none;
 }
 
 </style>
 
 <div class="inner">
-  <gaia-picker class="hour"></gaia-picker>
-  <gaia-picker class="minute"></gaia-picker>
+  <gaia-picker class="hours"></gaia-picker>
+  <gaia-picker class="minutes"></gaia-picker>
   <gaia-picker class="ampm">
     <li>AM</li>
     <li>PM</li>
@@ -242,4 +344,4 @@ module.exports.proto = proto;
 });})(typeof define=='function'&&define.amd?define
 :(function(n,w){'use strict';return typeof module=='object'?function(c){
 c(require,exports,module);}:function(c){var m={exports:{}};c(function(n){
-return w[n];},m.exports,m);w[n]=m.exports;};})('gaia-header',this));
+return w[n];},m.exports,m);w[n]=m.exports;};})('gaia-picker-time',this));

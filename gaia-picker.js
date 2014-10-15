@@ -20,11 +20,33 @@ var hasShadowCSS = (function() {
 })();
 
 /**
+ * Simple debug logger
+ *
+ * @param  {String} value
+ */
+var debug = !localStorage.debug ? function() {} : function() {
+  arguments[0] = '[gaia-picker] ' + arguments[0];
+  console.log.apply(console, arguments);
+};
+
+/**
  * Element prototype, extends from HTMLElement
  *
  * @type {Object}
  */
 var proto = Object.create(HTMLElement.prototype);
+
+/**
+ * Hard code the item height
+ * so that we don't need to
+ * query the DOM.
+ *
+ * @type {Number}
+ */
+proto.itemHeight = 50;
+
+// Test Hook
+proto.doc = document;
 
 /**
  * Called when the element is first created.
@@ -35,7 +57,9 @@ var proto = Object.create(HTMLElement.prototype);
  * @private
  */
 proto.createdCallback = function() {
-  this.createShadowRoot().innerHTML = template;
+  this.createShadowRoot();
+  this.shadowRoot.host = this; // Remove once in platform
+  this.shadowRoot.innerHTML = template;
 
   // Get els
   this.els = {
@@ -44,22 +68,202 @@ proto.createdCallback = function() {
     items: this.querySelectorAll('li')
   };
 
+  this.setup = this.setup.bind(this);
   this.shadowStyleHack();
 
   this.scroll = new Scroll({
     el: this.els.list,
-    snap: true,
-    itemHeight: 50
+    itemHeight: this.itemHeight,
+    containerHeight: this.height,
+    snap: true
   });
 
-  addEventListener('load', function() {
-    this.select(0);
-  }.bind(this));
+  this.height = this.getAttribute('height');
+  this.setup();
 
-  this.els.list.addEventListener('scrolling', this.onScrolling.bind(this));
-  this.els.list.addEventListener('snapping', this.onSnapped.bind(this));
+  this.els.list.addEventListener('panning', this.onPanning.bind(this));
   this.els.list.addEventListener('snapped', this.onSnapped.bind(this));
   this.els.list.addEventListener('tap', this.onListTap.bind(this));
+};
+
+proto.attachedCallback = function() {
+  this.setup();
+};
+
+proto.detachedCallback = function() {
+  this.teardown();
+};
+
+proto.onListTap = function(e) {
+  var el = this.getChild(e.detail.target);
+  var index = [].indexOf.call(this.els.items, el);
+  this.select(index);
+};
+
+proto.onPanning = function(e) {
+  this.clear();
+};
+
+proto.onSnapped = function(e) {
+  debug('snapped: %s', e.detail.index);
+  this.selectItem(e.detail.index);
+  this.dispatch('changed', {
+    value: this.value,
+    selected: this.selected,
+    index: this.index
+  });
+};
+
+/**
+ * Takes care of any configuration
+ * and set's the picker's initial
+ * selection.
+ *
+ * We need to take some measurements
+ * from the component in order to
+ * for the scroller to operate.
+ *
+ * By waiting until after the document
+ * has loaded, we can minimise costly
+ * 'reflows'.
+ *
+ * @private
+ */
+proto.setup = function() {
+  debug('setup');
+
+  // We can't setup without DOM context
+  if (!inDOM(this)) { return; }
+
+  // Defer setup until document has loaded
+  if (this.doc.readyState !== 'complete') {
+    addEventListener('load', this.setup);
+    return;
+  }
+
+  this.isSetup = true;
+  this.reflow();
+  this.select(this.pendingSelect || 0, { animate: false });
+
+  // Tidy up
+  removeEventListener('load', this.setup);
+  delete this.pendingSelect;
+};
+
+proto.teardown = function() {
+  debug('teardown');
+  this.isSetup = false;
+};
+
+/**
+ * Sets the required button-padding
+ * on the list to account for the
+ * y-offset.
+ *
+ * We also take this opportunity to
+ * pass some more measurements to
+ * the scroller if the user has
+ * defined a 'hight' attribute.
+ *
+ * This means the scroller doens't
+ * have to do the measuring itself,
+ * which can be expensive.
+ *
+ * @private
+ */
+proto.reflow = function() {
+  debug('reflow');
+
+  if (!this.isSetup) { return; }
+
+  var container = this.height || this.els.inner.clientHeight;
+  var padding = container - this.itemHeight;
+  this.els.list.style.paddingBottom = padding + 'px';
+
+  // Optimize scroller
+  if (this.height) {
+    this.scroll.config.listHeight = this.els.items.length * this.itemHeight;
+    this.scroll.config.listHeight += padding;
+  }
+
+  this.scroll.refresh();
+  debug('reflowed');
+};
+
+
+/**
+ * 1. Shouldn't scroll if not setup
+ * 2. Shouldn't fire the 'changed' event
+ */
+
+proto.select = function(index, options) {
+  debug('select: %s', index);
+
+  if (!this.isSetup) {
+    this.pendingSelect = index;
+    debug('queuedSelect');
+    return;
+  }
+
+  var changed = index !== this.index;
+  var exists = this.els.items[index];
+
+  if (!changed || !exists) { return; }
+
+  this.selectItem(index);
+  this.scroll.scrollToIndex(index, options);
+};
+
+proto.selectItem = function(index) {
+  if (index === this.index) { return; }
+  this.clear();
+  this.selected = this.els.items[index];
+  this.selected.classList.add('selected');
+  this.index = index;
+};
+
+proto.clear = function() {
+  if (!this.selected) return;
+  this.selected.classList.remove('selected');
+  this.selected = null;
+  this.index = null;
+};
+
+proto.dispatch = function(name, detail) {
+  this.dispatchEvent(new CustomEvent(name, { detail: detail || {} }));
+};
+
+proto.fill = function(list, options) {
+  var select = options && options.select;
+  var els = [];
+
+  this._style.remove();
+  this.innerHTML = '';
+  this.disableTransitions();
+
+  list.forEach(function(item) {
+    var el = document.createElement('li');
+    el.textContent = item;
+    this.appendChild(el);
+    els.push(el);
+  }, this);
+
+  this.els.items = els;
+  this.appendChild(this._style);
+  this.reflow();
+  this.clear();
+};
+
+proto.enableTransitions = function() {
+  this.classList.add('transitions-on');
+};
+
+proto.disableTransitions = function() {
+  this.classList.remove('transitions-on');
+};
+
+proto.getChild = function(el) {
+  return el && (el.parentNode === this ? el : this.getChild(el.parentNode));
 };
 
 proto.shadowStyleHack = function() {
@@ -71,58 +275,30 @@ proto.shadowStyleHack = function() {
   this._style = style;
 };
 
-proto.onListTap = function(e) {
-  var item = this.getChild(e.detail.target);
-  this.select(item);
+proto.attrs = {
+  height: {
+    get: function() { return this._height; },
+    set: function(value) {
+      value = Number(value);
+      this.scroll.config.containerHeight = value;
+      this._height = value;
+    }
+  },
+
+  value: {
+    get: function() {
+      return this.selected && this.selected.textContent;
+    }
+  },
+
+  length: {
+    get: function() {
+      return this.els.items.length || 0;
+    }
+  }
 };
 
-proto.onScrolling = function(e) {
-  this.clear();
-};
-
-proto.onSnapped = function(e) {
-  this.select(e.detail.index);
-};
-
-proto.select = function(param) {
-  var el = typeof param === 'number' ? this.children[param] : param;
-  if (!el) { return; }
-  this.clear();
-  el.classList.add('selected');
-  this.scroll.scrollToElement(el, { silent: true });
-  this.dispatch('change');
-  this.selected = el;
-};
-
-proto.clear = function() {
-  if (!this.selected) return;
-  this.selected.classList.remove('selected');
-  this.selected = null;
-};
-
-proto.value = function() {
-  return this.selected.textContent;
-}
-
-proto.dispatch = function(name, detail) {
-  this.dispatchEvent(new CustomEvent(name, { detail: detail || {} }))
-}
-
-proto.fill = function(list) {
-  this._style.remove();
-
-  list.forEach(function(item) {
-    var el = document.createElement('li');
-    el.textContent = item;
-    this.appendChild(el);
-  }, this);
-
-  this.appendChild(this._style);
-};
-
-proto.getChild = function(el) {
-  return el && (el.parentNode === this ? el : this.getChild(el.parentNode));
-}
+Object.defineProperties(proto, proto.attrs);
 
 var template = `
 <style>
@@ -130,25 +306,54 @@ var template = `
 :host {
   display: flex;
   position: relative;
-  box-shadow: inset 1px 1px 2px rgba(0,0,0,0.2);
+  height: 200px; /* overide with !important */
   overflow: hidden;
   -moz-user-select: none;
 }
 
-:host:after {
+.selected-background {
   content: '';
   display: block;
   position: absolute;
   top: 50%; left: 0;
-  z-index: -1;
+  z-index: 0;
   width: 100%;
   height: 50px;
   margin-top: -25px;
   background: var(--background-plus);
 }
 
-.gaia-picker-inner {
+/** Inner
+ ---------------------------------------------------------*/
 
+.gaia-picker-inner {
+  position: relative;
+  width: 100%;
+}
+
+/** Gradients
+ ---------------------------------------------------------*/
+
+.gaia-picker-inner:before,
+.gaia-picker-inner:after {
+  content: '';
+  display: block;
+  position: absolute;
+  left: 0; top: 0;
+  z-index: 1;
+  width: 100%;
+  height: 50px;
+  pointer-events: none;
+  background: linear-gradient(to bottom,
+    rgba(244,244,244,1) 0%,
+    rgba(244,244,244,0) 100%);
+}
+
+.gaia-picker-inner:after {
+  top: auto; bottom: 0;
+  background: linear-gradient(to top,
+    rgba(244,244,244,1) 0%,
+    rgba(244,244,244,0) 100%);
 }
 
 /** List
@@ -159,7 +364,6 @@ var template = `
   top: 50%; left: 0;
   width: 100%;
   margin-top: -25px;
-  padding-bottom: 350px;
 }
 
 /** List Items
@@ -190,6 +394,7 @@ var template = `
 </style>
 
 <div class="gaia-picker-inner">
+  <div class="selected-background"></div>
   <div class="list"><content></content></div>
 </div>`;
 
@@ -200,6 +405,10 @@ if (!hasShadowCSS) {
   template = template
     .replace('::content', 'gaia-picker.-content', 'g')
     .replace(':host', 'gaia-picker.-host', 'g');
+}
+
+function inDOM(el) {
+  return el ? el.parentNode === document.body || inDOM(el.parentNode || el.host) : false;
 }
 
 // Register and return the constructor

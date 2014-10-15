@@ -11,11 +11,11 @@
   <script src="lib/snap-scroll.js"></script>
   <script src="gaia-picker.js"></script>
   <script src="gaia-picker-time.js"></script>
+  <script src="gaia-picker-date.js"></script>
   <style>
 
-  gaia-picker,
-  gaia-picker-time {
-    height: 400px;
+  gaia-picker {
+    height: 600px !important;
   }
 
   </style>
@@ -41,7 +41,7 @@
     <li>December</li>
   </div> -->
 
-  <gaia-picker>
+<!--   <gaia-picker height="600">
     <li>January</li>
     <li>February</li>
     <li>March</li>
@@ -54,14 +54,20 @@
     <li>October</li>
     <li>November</li>
     <li>December</li>
-  </gaia-picker>
+  </gaia-picker> -->
 
-  <gaia-picker-time format="12"></gaia-picker-time>
+  <!-- <gaia-picker-time format="12hr" height="200"></gaia-picker-time> -->
+  <gaia-picker-date
+    min="1967-05-02"
+    max="2025-01-01"
+    value="2000-03-31">
+  </gaia-picker-date>
 
-  <gaia-picker-time
+<!--   <gaia-picker-time
     hours="12"
-    minutes="26">
-  </gaia-picker-time>
+    minutes="26"
+    height="200">
+  </gaia-picker-time> -->
 
   <script>
 
