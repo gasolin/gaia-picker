@@ -17,8 +17,10 @@ module.exports = function(config) {
       'lib/snap-scroll.js',
       'gaia-picker.js',
       'gaia-picker-time.js',
+      'gaia-picker-date.js',
       'test/gaia-picker.js',
-      'test/gaia-picker-time.js'
+      'test/gaia-picker-time.js',
+      'test/gaia-picker-date.js'
     ]
   });
 };

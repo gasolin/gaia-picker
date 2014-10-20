@@ -34,8 +34,8 @@ var proto = Object.create(HTMLElement.prototype);
 
 
 var defaults = {
-  min: 1900,
-  max: 2099
+  min: new Date('1900', '0', '01'),
+  max: new Date('2099', '0', '01')
 };
 
 /**
@@ -47,8 +47,6 @@ var defaults = {
  * @private
  */
 proto.createdCallback = function() {
-  var now = new Date();
-
   this.createShadowRoot();
   this.shadowRoot.host = this; // Remove once .host is in platform
   this.shadowRoot.innerHTML = template;
@@ -64,51 +62,23 @@ proto.createdCallback = function() {
     }
   };
 
-  this.value = this.getAttribute('value') || new Date();
-  this.min = this.getAttribute('min') || defaults.min;
-  this.max = this.getAttribute('max') || defaults.max;
-
+  // This currently not working
   this.setPickerHeights();
 
-  this.refreshYears();
-  this.refreshMonths();
+  this.min = this.getAttribute('min') || defaults.min;
+  this.max = this.getAttribute('max') || defaults.max;
+  this.value = this.getAttribute('value') || new Date();
 
-  this.setPickerOrder(this.getDateTimeFormat());
-  this.addListeners();
+  this.updatePickers();
+
+  setTimeout(this.addListeners.bind(this));
+  this.updatePickerOrder();
+
+  this.created = true;
 };
 
 proto.attributeChangedCallback = function(attr, from, to) {
   if (this.attrs[attr]) { this[attr] = to; }
-};
-
-proto.refreshYears = function() {
-  var list = createYearList(this.min, this.max);
-  var current = this.value.getFullYear();
-  var min = this.min.getFullYear();
-  var index = current - min;
-  this.els.pickers.year.fill(list);
-  this.els.pickers.year.select(index);
-  debug('refreshed years: %S index: %s', list, index);
-};
-
-proto.refreshMonths = function() {
-  var list = createMonthList();
-  this.els.pickers.month.fill(list);
-  this.els.pickers.month.select(this.value.getMonth());
-};
-
-proto.refreshDays = function() {
-  var picker = this.els.pickers.day;
-  var year = this.value.getFullYear();
-  var month = this.value.getMonth();
-  var list = createDayList(year, month);
-  var index = this.value.getDate() - 1;
-  var changed = list.length !== picker.length;
-
-  if (!changed) { return; }
-
-  picker.fill(list);
-  picker.select(index);
 };
 
 proto.addListeners = function() {
@@ -125,28 +95,55 @@ proto.onYearChanged = function(e) {
 
 proto.onMonthChanged = function(e) {
   debug('month changed: %s', e.detail.index);
-  this.setMonth(e.detail.index);
+  var index = e.detail.index;
+  var isFirstYear = this.min.getFullYear() === this.value.getFullYear();
+
+  // If we're in the first year, the first
+  // month in the list may not be January.
+  if (isFirstYear) {
+    index = this.min.getMonth() + index;
+    debug('index adjusted: %s', index);
+  }
+
+  this.setMonth(index);
 };
 
 proto.onDayChanged = function(e) {
   debug('day changed: %s', e.detail.index);
-  var day = e.detail.index + 1;
-  this.value.setDate(day);
+  this.setDay(e.detail.index + 1);
 };
 
+/**
+ * Set the year of the date picker.
+ * @param {[type]} year [description]
+ */
 proto.setYear = function(year) {
-  var current = this.value.getFullYear();
-  if (year === current) { return; }
+  debug('set year: %s', year);
+  year = Number(year);
+
+  // Abort if year didn't change
+  if (year === this.value.getFullYear()) { return; }
 
   var month = this.value.getMonth();
   var days = getDaysInMonth(year, month);
+  var isMinYear = year === this.min.getFullYear();
+  var isMaxYear = year === this.max.getFullYear();
 
+  // Ensure the month doen't exceed the max/min range
+  if (isMinYear) { this.value.setMonth(Math.max(this.min.getMonth(), month)); }
+  if (isMaxYear) { this.value.setMonth(Math.min(this.max.getMonth(), month)); }
+
+  // When the new month has fewer days
+  // days than the current day, we must
+  // adjust the day to maximum available.
   if (this.value.getDate() > days) {
     this.value.setDate(days);
+    debug('day adjusted: %s', days);
   }
 
   this.value.setFullYear(year);
-  this.refreshDays();
+  this.updateMonthPicker();
+  this.updateDayPicker();
 };
 
 proto.setMonth = function(month) {
@@ -163,26 +160,193 @@ proto.setMonth = function(month) {
   }
 
   this.value.setMonth(month);
-  this.refreshDays();
+  this.updateDayPicker();
+};
+
+proto.setDay = function(day) {
+  var changed = this.value.getDate() !== day;
+  if (!changed) { return; }
+  this.value.setDate(day);
+  this.updateDayPickerValue();
+};
+
+proto.updatePickers = function() {
+  this.updateYearPicker();
+  this.updateMonthPicker();
+  this.updateDayPicker();
+};
+
+/**
+ * Refreshes the year list based on
+ * the current max/min dates, only
+ * if it changed.
+ *
+ * @private
+ */
+proto.updateYearPicker = function() {
+  debug('update years');
+  if (!this.min || !this.max) { return; }
+
+  var picker = this.els.pickers.year;
+  var list = createYearList(this.min, this.max);
+  var lengthChanged = picker.length !== list.length;
+  var firstItem = picker.children[0];
+
+  // If the length of the list is different
+  // or the value of the first item is different
+  // we can assume the list has changed.
+  var changed = lengthChanged || (firstItem && firstItem.textContent !== list[0]);
+
+  if (!changed) { return; }
+
+  this.els.pickers.year.fill(list);
+  this.updateYearPickerValue();
+  debug('years updated', list);
+};
+
+proto.updateMonthPicker = function() {
+  debug('update months');
+  if (!this.value) { return; }
+
+  var picker = this.els.pickers.month;
+  var firstItem = picker.children[0];
+  var list = this.createMonthList();
+
+  // If the length of the list is different
+  // or the value of the first item is different
+  // we can assume the list has changed.
+  var changed = picker.length !== list.length ||
+    firstItem && firstItem.textContent !== list[0];
+
+  if (!changed) {
+    debug('list didn\'t change');
+    return;
+  }
+
+  picker.fill(list);
+  this.updateMonthPickerValue();
+  debug('months updated', list);
+};
+
+proto.updateDayPicker = function() {
+  debug('update days');
+  if (!this.value) { return; }
+  var picker = this.els.pickers.day;
+  var year = this.value.getFullYear();
+  var month = this.value.getMonth();
+  var list = createDayList(year, month);
+  var changed = list.length !== picker.length;
+  var day = this.value.getDate();
+
+  if (!changed) { return; }
+
+  picker.fill(list);
+  this.updateDayPickerValue(day);
+  debug('days updated', list);
+};
+
+/**
+ * Updates the year picker to match
+ * the current year value.
+ *
+ * This won't do anything if triggered
+ * from the 'changed' callback.
+ *
+ * @private
+ */
+proto.updateYearPickerValue = function() {
+  debug('update years');
+  if (!this.value) { return; }
+  var min = this.min.getFullYear();
+  var index = this.value.getFullYear() - min;
+  this.els.pickers.year.select(index);
+  debug('year picker index updated: %s', index);
+};
+
+/**
+ * Updates the month picker to match
+ * the current month value.
+ *
+ * This won't do anything if triggered
+ * from the 'changed' callback.
+ *
+ * @private
+ */
+proto.updateMonthPickerValue = function() {
+  debug('update months');
+  if (!this.value) { return; }
+  var isMinYear = this.value.getFullYear() === this.min.getFullYear();
+  var index = this.value.getMonth();
+
+  // If we're in the minimum year, the first
+  // month in the list may not be January.
+  if (isMinYear) {
+    index = index - this.min.getMonth();
+    debug('index altered: %s', index);
+  }
+
+  this.els.pickers.month.select(index);
+  debug('month picker index updated: %s', index);
+};
+
+/**
+ * Updates the month picker to match
+ * the current month value.
+ *
+ * This won't do anything if triggered
+ * from the 'changed' callback.
+ *
+ * @private
+ */
+proto.updateDayPickerValue = function() {
+  if (!this.value) { return; }
+  var index = this.value.getDate() - 1;
+  this.els.pickers.day.select(index);
+  debug('day picker index updated: %s', index);
+};
+
+/**
+ * Specifies if the given Date is
+ * in the picker's date range.
+ *
+ * @param  {Date} date
+ * @return {Boolean}
+ */
+proto.inRange = function(date) {
+  var time = date.getTime();
+  return time <= this.max.getTime() && time >= this.min.getTime();
+};
+
+proto.createMonthList = function() {
+  var currentYear = this.value.getFullYear();
+  var years = this.max.getFullYear() - this.min.getFullYear();
+  var date = new Date(currentYear, 0, 1);
+  var list = [];
+
+  for (var i = 0; i < 12; i++) {
+    date.setMonth(i);
+    if (this.inRange(date)) {
+      list.push(localeFormat(date, '%b'));
+    }
+  }
+
+  return list;
 };
 
 proto.setPickerHeights = function() {
-  var height = Number(this.getAttribute('height'));
+  var height = parseInt(this.style.height, 10);
   if (!height) { return; }
   this.els.pickers.day.height = height;
   this.els.pickers.month.height = height;
   this.els.pickers.year.height = height;
+  debug('set picker heights: %s', height);
 };
 
-proto.setPickerOrder = function(order) {
+proto.updatePickerOrder = function() {
+  var order = getDateComponentOrder();
   order.forEach(function(type, i) {
     this.els.pickers[type].style.order = i;
   }, this);
-};
-
-proto.getDateTimeFormat = function() {
-  var format = navigator.mozL10n && navigator.mozL10n.get('dateTimeFormat_%x') || '%m/%d/%Y';
-  return getDateComponentOrder(format);
 };
 
 /**
@@ -199,14 +363,23 @@ proto.setAttribute = function(name, value) {
   this.els.inner.setAttribute(name, value);
 };
 
-proto.attrs = {
+proto.clampDate = function(date) {
+  if (date > this.max) { return new Date(this.max.getTime()); }
+  else if (date < this.min) { return new Date(this.min.getTime()); }
+  else { return date; }
+};
 
+proto.attrs = {
   value: {
     get: function() { return this._value; },
     set: function(value) {
       if (!value) { return; }
       var date = typeof value === 'string' ? stringToDate(value) : value;
-      this._value = date;
+      var clamped = this.clampDate(date);
+      this._value = clamped;
+
+      // Only update pickers if fully created
+      if (this.created) { this.updatePickers(); }
     }
   },
 
@@ -216,6 +389,9 @@ proto.attrs = {
       if (!value) { return; }
       var date = typeof value === 'string' ? stringToDate(value) : value;
       this._min = date;
+
+      // Only update pickers if fully created
+      if (this.created) { this.updatePickers(); }
     }
   },
 
@@ -225,34 +401,9 @@ proto.attrs = {
       if (!value) { return; }
       var date = typeof value === 'string' ? stringToDate(value) : value;
       this._max = date;
-    }
-  },
 
-  days: {
-    get: function() { return this._days; },
-    set: function(value) {
-      debug('set days: %s', value, this.days);
-      value = Number(value);
-      if (value === this.hours) { return; }
-      this._days = value;
-    }
-  },
-
-  months: {
-    get: function() { return this._months; },
-    set: function(value) {
-      debug('set months: %s', value);
-      value = Number(value);
-      if (value === this.months) { return; }
-      this.els.pickers.months.select(value);
-      this._months = value;
-    }
-  },
-
-  years: {
-    get: function() { return this._years; },
-    set: function(value) {
-      this._years = value;
+      // Only update pickers if fully created
+      if (this.created) { this.updatePickers(); }
     }
   }
 };
@@ -286,7 +437,7 @@ gaia-picker {
   flex: 1;
 }
 
-gaia-picker:not(:first-child):after {
+gaia-picker:after {
   content: '';
   position: absolute;
   left: 0; top: 0;
@@ -313,13 +464,9 @@ if (!hasShadowCSS) {
     .replace(':host', 'gaia-picker-date.-host', 'g');
 }
 
-function createList(min, max, format) {
-  var list = [];
-  for (var i = min; i < max; ++i) {
-    list.push(format ? format(i) : i);
-  }
-  return list;
-}
+/**
+ * Utils
+ */
 
 function on(el, name, fn, ctx) {
   el.addEventListener(name, fn.bind(ctx));
@@ -382,18 +529,6 @@ function createYearList(min, max) {
   return list;
 }
 
-function createMonthList() {
-  var date = new Date(1970, 0, 1);
-  var list = [];
-
-  for (var i = 0; i < 12; i++) {
-    date.setMonth(i);
-    list.push(localeFormat(date, '%b'));
-  }
-
-  return list;
-}
-
 function createDayList(year, month) {
   var days = getDaysInMonth(year, month);
   var list = [];
@@ -403,7 +538,6 @@ function createDayList(year, month) {
     list.push(localeFormat(date, '%d'));
   }
 
-  debug('days list created: %s', days, list.length);
   return list;
 }
 
@@ -421,7 +555,12 @@ function stringToDate(string) {
   return date;
 }
 
-function getDateComponentOrder(format) {
+function getDateTimeFormat() {
+  return navigator.mozL10n && navigator.mozL10n.get('dateTimeFormat_%x') || '%m/%d/%Y';
+}
+
+function getDateComponentOrder() {
+  var format = getDateTimeFormat();
   var tokens = format.match(/(%E.|%O.|%.)/g);
   var fallback = ['day', 'month', 'year'];
   var order = [];

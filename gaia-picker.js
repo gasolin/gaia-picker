@@ -24,8 +24,8 @@ var hasShadowCSS = (function() {
  *
  * @param  {String} value
  */
-var debug = !localStorage.debug ? function() {} : function() {
-  arguments[0] = '[gaia-picker] ' + arguments[0];
+var debug = !~location.search.indexOf('|gaia-picker|') ? function() {} : function() {
+  arguments[0] = `[gaia-picker]  ` + arguments[0];
   console.log.apply(console, arguments);
 };
 
@@ -79,8 +79,16 @@ proto.createdCallback = function() {
   });
 
   this.height = this.getAttribute('height');
-  this.setup();
 
+  // Bind listeners later to avoid callbacks
+  // firing during user configuration stage.
+  setTimeout(this.addListeners.bind(this), 500);
+  setTimeout(this.setup.bind(this));
+
+  this.created = true;
+};
+
+proto.addListeners = function() {
   this.els.list.addEventListener('panning', this.onPanning.bind(this));
   this.els.list.addEventListener('snapped', this.onSnapped.bind(this));
   this.els.list.addEventListener('tap', this.onListTap.bind(this));
@@ -144,6 +152,8 @@ proto.setup = function() {
   this.isSetup = true;
   this.reflow();
   this.select(this.pendingSelect || 0, { animate: false });
+  this.classList.add('setup');
+  setTimeout(this.enableTransitions.bind(this));
 
   // Tidy up
   removeEventListener('load', this.setup);
@@ -197,7 +207,7 @@ proto.reflow = function() {
  */
 
 proto.select = function(index, options) {
-  debug('select: %s', index);
+  debug('select: %s', index, this);
 
   if (!this.isSetup) {
     this.pendingSelect = index;
@@ -208,7 +218,7 @@ proto.select = function(index, options) {
   var changed = index !== this.index;
   var exists = this.els.items[index];
 
-  if (!changed || !exists) { return; }
+  if (!changed || !exists) { return debug('didn\'t change'); }
 
   this.selectItem(index);
   this.scroll.scrollToIndex(index, options);
@@ -237,9 +247,10 @@ proto.fill = function(list, options) {
   var select = options && options.select;
   var els = [];
 
+  this.disableTransitions();
+
   this._style.remove();
   this.innerHTML = '';
-  this.disableTransitions();
 
   list.forEach(function(item) {
     var el = document.createElement('li');
@@ -252,6 +263,12 @@ proto.fill = function(list, options) {
   this.appendChild(this._style);
   this.reflow();
   this.clear();
+
+  // Disable transitions for a short
+  // peroid of time to prevent reselection
+  // after new content fill looking glitchy
+
+  setTimeout(this.enableTransitions.bind(this), 4000);
 };
 
 proto.enableTransitions = function() {
@@ -291,6 +308,12 @@ proto.attrs = {
     }
   },
 
+  children: {
+    get: function() {
+      return this.els.items || [];
+    }
+  },
+
   length: {
     get: function() {
       return this.els.items.length || 0;
@@ -309,7 +332,16 @@ var template = `
   height: 200px; /* overide with !important */
   overflow: hidden;
   -moz-user-select: none;
+  visibility: hidden;
+    mask: url(#m1);
 }
+
+:host.setup {
+  visibility: visible;
+}
+
+/** Selected Background
+ ---------------------------------------------------------*/
 
 .selected-background {
   content: '';
@@ -378,7 +410,6 @@ var template = `
   line-height: 50px;
   text-align: center;
   list-style-type: none;
-  transition: transform 140ms linear;
   cursor: pointer;
 }
 
@@ -389,6 +420,10 @@ var template = `
 ::content li.selected {
   color: var(--highlight-color);
   transform: scale(1.5);
+}
+
+.transitions-on li {
+  transition: transform 140ms linear;
 }
 
 </style>
