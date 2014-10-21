@@ -93,14 +93,101 @@ suite('GaiaPickerDate', function() {
     assert.equal(el.value.getTime(), value.getTime());
   });
 
-  test.only('It only shows months in the given range', function() {
+  test('It only shows months in the given range', function() {
     var el = create('', '2014-07-01', '2014-05-01');
     var months = el.els.pickers.month.children;
     assert.equal(months.length, 3);
   });
 
   suite('GaiaPickerDate#setYear()', function() {
-    // test('It ')
+    test('It doesn\'t do anything if the value didn\'t change', function() {
+      var el = create('2014-10-21');
+      el.setYear(2015);
+      assert.equal(el.value.getFullYear(), 2015);
+    });
+
+    test('It doesn\'t do anything if the value didn\'t change', function() {
+      var el = create('2014-10-21');
+
+      this.sinon.spy(el.value, 'setFullYear');
+      el.setYear(2014);
+
+      sinon.assert.notCalled(el.value.setFullYear);
+    });
+
+    test('It clamps to max month when entering max year', function() {
+      var el = create('2014-10-21', '2015-04-01');
+
+      assert.equal(el.value.getMonth(), 9);
+
+      // Set to max year
+      el.setYear(2015);
+
+      assert.equal(el.value.getMonth(), 3, 'month was adjusted to max month');
+      assert.equal(el.value.getFullYear(), 2015, 'year was change to set year');
+    });
+
+    test('It clamps to min month when entering min year', function() {
+      var el = create('2014-02-21', '', '2013-04-01');
+
+      assert.equal(el.value.getMonth(), 1);
+
+      // Set to min year
+      el.setYear(2013);
+
+      assert.equal(el.value.getMonth(), 3, 'month was adjusted to min month');
+      assert.equal(el.value.getFullYear(), 2013, 'year was change to set year');
+    });
+
+    test('It adjusts the day when 02/29 moving from leap to non-leap year', function() {
+      var el = create('2000-02-29');
+
+      el.setYear(1999);
+      assert.equal(el.value.getDate(), 28, 'day was adjusted from 29 to 28');
+    });
+
+    test('It selects the correct index of the year picker', function() {
+      var el = create('2000-01-01', '2010-01-01', '2000-01-01');
+      var picker = el.els.pickers.year;
+      this.sinon.spy(picker, 'select');
+      el.setYear(2005);
+      sinon.assert.calledWith(picker.select, 5);
+    });
+
+    test('It updates the month picker list items when available months change', function() {
+      var el = create('2014-10-21', '2015-04-01', '2013-06-01');
+      var monthsPicker = el.els.pickers.month;
+
+      assert.equal(monthsPicker.length, 12);
+
+      // Change to max year with
+      // fewer available months
+      el.setYear(2015);
+      assert.equal(monthsPicker.length, 4);
+
+      // Change to min year with
+      // fewer available months
+      el.setYear(2013);
+      assert.equal(monthsPicker.length, 7);
+    });
+
+    test('It updates the date picker list items when available days change', function() {
+      var el = create('2000-02-29');
+      var dayPicker = el.els.pickers.day;
+
+      assert.equal(dayPicker.length, 29);
+
+      el.setYear(1999);
+      assert.equal(dayPicker.length, 28, 'day picker length changed to 28');
+    });
+
+    test('It adjusts the days when the month is changed', function() {
+      var el = create('2013-07-21', '', '2014-04-01');
+
+      el.setYear(2014);
+
+
+    });
   });
 
   function create(value, max, min) {

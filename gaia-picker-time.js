@@ -48,7 +48,6 @@ proto.createdCallback = function() {
   var now = new Date();
 
   this.createShadowRoot();
-  this.shadowRoot.host = this; // Remove once .host is in platform
   this.shadowRoot.innerHTML = template;
   this.shadowStyleHack();
 

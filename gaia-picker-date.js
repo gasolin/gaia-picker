@@ -1,4 +1,5 @@
 ;(function(define,n){'use strict';define(function(require,exports,module){
+/*jshint laxbreak:true*/
 /*jshint esnext:true*/
 /*shint node:true*/
 
@@ -48,7 +49,6 @@ var defaults = {
  */
 proto.createdCallback = function() {
   this.createShadowRoot();
-  this.shadowRoot.host = this; // Remove once .host is in platform
   this.shadowRoot.innerHTML = template;
   this.shadowStyleHack();
 
@@ -62,114 +62,301 @@ proto.createdCallback = function() {
     }
   };
 
-  // This currently not working
-  this.setPickerHeights();
-
-  this.min = this.getAttribute('min') || defaults.min;
-  this.max = this.getAttribute('max') || defaults.max;
-  this.value = this.getAttribute('value') || new Date();
-
-  this.updatePickers();
-
-  setTimeout(this.addListeners.bind(this));
+  this.setInitialValues();
   this.updatePickerOrder();
-
+  this.setPickerHeights();
+  this.updatePickers();
   this.created = true;
+
+  // Bind listeners later to avoid strange
+  // things happening during setup.
+  setTimeout(this.addListeners.bind(this));
 };
 
-proto.attributeChangedCallback = function(attr, from, to) {
-  if (this.attrs[attr]) { this[attr] = to; }
+/**
+ * Derives an initial value for the picker.
+ *
+ * Use `value` attribute if given.
+ * Default to using today's date.
+ *
+ * @private
+ */
+proto.setInitialValues = function() {
+  var value = this.getAttribute('value');
+  var min = this.getAttribute('min');
+  var max = this.getAttribute('max');
+
+  this.min = min || defaults.min;
+  this.max = max || defaults.max;
+
+  this.value = value || new Date();
+  debug('initial value: %s', this.value);
 };
 
+/**
+ * Adds change listeners to allow
+ * the date picker to respond when
+ * pickers change.
+ *
+ * (Pickers change when users
+ * interact with them)
+ *
+ * @private
+ */
 proto.addListeners = function() {
   var pickers = this.els.pickers;
-  on(pickers.year, 'changed', this.onYearChanged, this);
-  on(pickers.month, 'changed', this.onMonthChanged, this);
-  on(pickers.day, 'changed', this.onDayChanged, this);
+  pickers.year.addEventListener('changed', this.onYearChanged.bind(this));
+  pickers.month.addEventListener('changed', this.onMonthChanged.bind(this));
+  pickers.day.addEventListener('changed', this.onDayChanged.bind(this));
 };
 
+/**
+ * Sets the year to match the value
+ * currently shown on the picker.
+ *
+ * @param  {Event} e
+ * @private
+ */
 proto.onYearChanged = function(e) {
   debug('year changed: %s', e.detail.value);
   this.setYear(e.detail.value);
 };
 
+/**
+ * Sets the month to match the value
+ * currently shown on the picker.
+ *
+ * @param  {Event} e
+ * @private
+ */
 proto.onMonthChanged = function(e) {
   debug('month changed: %s', e.detail.index);
-  var index = e.detail.index;
-  var isFirstYear = this.min.getFullYear() === this.value.getFullYear();
-
-  // If we're in the first year, the first
-  // month in the list may not be January.
-  if (isFirstYear) {
-    index = this.min.getMonth() + index;
-    debug('index adjusted: %s', index);
-  }
-
-  this.setMonth(index);
-};
-
-proto.onDayChanged = function(e) {
-  debug('day changed: %s', e.detail.index);
-  this.setDay(e.detail.index + 1);
+  this.setMonth(this.monthIndexToValue(e.detail.index));
 };
 
 /**
- * Set the year of the date picker.
- * @param {[type]} year [description]
+ * Sets the day to match the value
+ * currently shown on the picker.
+ *
+ * @param  {Event} e
+ * @private
+ */
+proto.onDayChanged = function(e) {
+  debug('day changed: %s', e.detail.index);
+  this.setDay(this.dayIndexToValue(e.detail.index));
+};
+
+/**
+ * Converts a given month picker
+ * item index to month value.
+ *
+ * @param  {Number} index
+ * @return {Number}
+ */
+proto.monthIndexToValue = function(index) {
+  return this.isMinYear() ? (this.min.getMonth() + index) : index;
+};
+
+/**
+ * Converts a given month value
+ * to the picker item index.
+ *
+ * @param  {Number} value
+ * @return {Number}
+ */
+proto.monthValueToIndex = function(value) {
+  return this.isMinYear() ? (value - this.min.getMonth()) : value;
+};
+
+/**
+ * Converts a given day picker
+ * item index to day value.
+ *
+ * @param  {Number} index
+ * @return {Number}
+ */
+proto.dayIndexToValue = function(index) {
+  return this.isMinMonth() ? this.min.getDate() + index : (index + 1);
+};
+
+/**
+ * Converts a given day value
+ * to the picker item index.
+ *
+ * @param  {Number} value
+ * @return {Number}
+ */
+proto.dayValueToIndex = function(value) {
+  return this.isMinMonth() ? value - this.min.getDate() : value - 1;
+};
+
+/**
+ * Set the date-picker to a given year.
+ *
+ * Changing the year has several dependencies.
+ * We normalize the month and day values to
+ * new values that fit within the context
+ * of the new year.
+ *
+ * We manually update the year, month and
+ * day values, then udate the pickers.
+ *
+ * The day and month pickers need to fully
+ * updated as the list contents may have
+ * changed due to entering max/min date
+ * range year or leap year changing
+ * number of days in the month.
+ *
+ * @param {Number} year
+ * @public
  */
 proto.setYear = function(year) {
   debug('set year: %s', year);
   year = Number(year);
 
-  // Abort if year didn't change
+  // Exit if year didn't change
   if (year === this.value.getFullYear()) { return; }
 
-  var month = this.value.getMonth();
-  var days = getDaysInMonth(year, month);
-  var isMinYear = year === this.min.getFullYear();
-  var isMaxYear = year === this.max.getFullYear();
+  year = this.normalizeYear(year);
 
-  // Ensure the month doen't exceed the max/min range
-  if (isMinYear) { this.value.setMonth(Math.max(this.min.getMonth(), month)); }
-  if (isMaxYear) { this.value.setMonth(Math.min(this.max.getMonth(), month)); }
+  var month = this.normalizeMonth(this.value.getMonth(), { year: year });
+  var day = this.normalizeDay(this.value.getDate(), { month: month, year: year });
 
-  // When the new month has fewer days
-  // days than the current day, we must
-  // adjust the day to maximum available.
-  if (this.value.getDate() > days) {
-    this.value.setDate(days);
-    debug('day adjusted: %s', days);
-  }
-
+  this.value.setDate(day);
+  this.value.setMonth(month);
   this.value.setFullYear(year);
+
+  this.updateYearPickerValue();
   this.updateMonthPicker();
   this.updateDayPicker();
 };
 
+/**
+ * Set the date-picker to a given month.
+ *
+ * The day picker is dependent on the month
+ * value so we must normalize the current
+ * day value to a value that fits into
+ * the new date context.
+ *
+ * We then set the day first, followed by
+ * the month. The order is important as
+ * setting a day that doesn't exist will
+ * cause the month to roll-over.
+ *
+ * @param {Number} month
+ * @public
+ */
 proto.setMonth = function(month) {
   debug('set month: %s', month);
-  var year = this.value.getFullYear();
-  var days = getDaysInMonth(year, month);
+  month = Number(month);
 
-  // When the new month has fewer days
-  // days than the current day, we must
-  // adjust the day to maximum available.
-  if (this.value.getDate() > days) {
-    this.value.setDate(days);
-    debug('day adjusted: %s', days);
-  }
+  // Exit if nothing changed
+  if (month === this.value.getMonth()) { return; }
 
+  month = this.normalizeMonth(month);
+  var day = this.normalizeDay(this.value.getDate(), { month: month });
+
+  this.value.setDate(day);
   this.value.setMonth(month);
+  this.updateMonthPickerValue();
   this.updateDayPicker();
 };
 
+/**
+ * Sets the underlying day value
+ * and updates the day picker.
+ *
+ * If the day didn't change,
+ * nothing is done.
+ *
+ * Normalizing the day prevents a day
+ * being set that is either out of range
+ * or doesn't exist in the calendar.
+ *
+ * @param {Number} day
+ * @public
+ */
 proto.setDay = function(day) {
-  var changed = this.value.getDate() !== day;
-  if (!changed) { return; }
+  day = Number(day);
+  if (day === this.value.getDate()) { return; }
+  day = this.normalizeDay(day);
   this.value.setDate(day);
   this.updateDayPickerValue();
 };
 
+/**
+ * Takes a year and 'normalizes' it to
+ * a year that exists in the picker's
+ * date range.
+ *
+ * @param  {Number} year
+ * @return {Number}
+ */
+proto.normalizeYear = function(year) {
+  var max = this.max.getFullYear();
+  var min = this.min.getFullYear();
+  return year > max ? max
+    : year < min ? min
+    : year;
+};
+
+/**
+ * Takes a given month value and 'normalizes'
+ * it to a month that exists in the overall
+ * picker date range.
+ *
+ * Options:
+ *
+ *   - `year` {Number} - The year to normalize to
+ *
+ * @param  {Number} month
+ * @param  {Object} options
+ * @return {Number}
+ */
+proto.normalizeMonth = function(month, options) {
+  var year = options && options.year;
+  if (this.isMinYear(year)) { month = Math.max(this.min.getMonth(), month); }
+  if (this.isMaxYear(year)) { month = Math.min(this.max.getMonth(), month); }
+  return month;
+};
+
+/**
+ * Takes a given day value and 'normalizes'
+ * it to a day that exists in the year,
+ * month and overall picker date range.
+ *
+ * Options:
+ *
+ *   - `year` {Number} - The year to normalize to
+ *   - `month` {Number} - The month to normalize to
+ *
+ * @param  {Number} day
+ * @param  {Object} options
+ * @return {Number}
+ */
+proto.normalizeDay = function(day, options) {
+  var year = (options && options.year) || this.value.getFullYear();
+  var month = (options && options.month) || this.value.getMonth();
+  var total = getDaysInMonth(year, month);
+
+  // Make sure the day doesn't
+  // exceed the total available days
+  day = Math.min(day, total);
+
+  // Clamp it in the date range
+  if (this.isMinMonth(month, year)) { day = Math.max(this.min.getDate(), day); }
+  if (this.isMaxMonth(month, year)) { day = Math.min(this.max.getDate(), day); }
+  return day;
+};
+
+/**
+ * Update all the picker's content
+ * and values to match the current
+ * date-picker's date value.
+ *
+ * @private
+ */
 proto.updatePickers = function() {
   this.updateYearPicker();
   this.updateMonthPicker();
@@ -187,15 +374,16 @@ proto.updateYearPicker = function() {
   debug('update years');
   if (!this.min || !this.max) { return; }
 
+  var list = this.createYearList();
   var picker = this.els.pickers.year;
-  var list = createYearList(this.min, this.max);
   var lengthChanged = picker.length !== list.length;
   var firstItem = picker.children[0];
 
   // If the length of the list is different
   // or the value of the first item is different
   // we can assume the list has changed.
-  var changed = lengthChanged || (firstItem && firstItem.textContent !== list[0]);
+  var changed = lengthChanged
+    || (firstItem && firstItem.textContent !== list[0]);
 
   if (!changed) { return; }
 
@@ -204,8 +392,20 @@ proto.updateYearPicker = function() {
   debug('years updated', list);
 };
 
+/**
+ * Create a list of month, fill the month
+ * picker and update the picker value.
+ *
+ * We make an assumption that the list
+ * didn't change if the length remains
+ * the same as the picker's and the
+ * `textContent` of the first item
+ * is the same.
+ *
+ * @private
+ */
 proto.updateMonthPicker = function() {
-  debug('update months');
+  debug('update months picker');
   if (!this.value) { return; }
 
   var picker = this.els.pickers.month;
@@ -218,39 +418,43 @@ proto.updateMonthPicker = function() {
   var changed = picker.length !== list.length ||
     firstItem && firstItem.textContent !== list[0];
 
-  if (!changed) {
-    debug('list didn\'t change');
-    return;
-  }
+  if (!changed) { return debug('didn\'t change'); }
 
   picker.fill(list);
   this.updateMonthPickerValue();
-  debug('months updated', list);
+  debug('months picker updated', list);
 };
 
+/**
+ * Create a list of days, fill the day
+ * picker and update the picker value.
+ *
+ * We make an assumption that the list
+ * didn't change if the length remains
+ * the same as the picker's.
+ *
+ * @private
+ */
 proto.updateDayPicker = function() {
   debug('update days');
   if (!this.value) { return; }
   var picker = this.els.pickers.day;
   var year = this.value.getFullYear();
   var month = this.value.getMonth();
-  var list = createDayList(year, month);
+  var list = this.createDayList();
   var changed = list.length !== picker.length;
   var day = this.value.getDate();
 
-  if (!changed) { return; }
+  if (!changed) { return debug('days didn\'t change'); }
 
   picker.fill(list);
-  this.updateDayPickerValue(day);
+  this.updateDayPickerValue();
   debug('days updated', list);
 };
 
 /**
  * Updates the year picker to match
  * the current year value.
- *
- * This won't do anything if triggered
- * from the 'changed' callback.
  *
  * @private
  */
@@ -267,24 +471,17 @@ proto.updateYearPickerValue = function() {
  * Updates the month picker to match
  * the current month value.
  *
- * This won't do anything if triggered
- * from the 'changed' callback.
+ * If the year is the min year, then Jan
+ * may not be the first month, therefore
+ * indexes need to be adjusted.
  *
  * @private
  */
 proto.updateMonthPickerValue = function() {
-  debug('update months');
+  debug('update month picker value');
   if (!this.value) { return; }
-  var isMinYear = this.value.getFullYear() === this.min.getFullYear();
-  var index = this.value.getMonth();
-
-  // If we're in the minimum year, the first
-  // month in the list may not be January.
-  if (isMinYear) {
-    index = index - this.min.getMonth();
-    debug('index altered: %s', index);
-  }
-
+  var value = this.value.getMonth();
+  var index = this.monthValueToIndex(value);
   this.els.pickers.month.select(index);
   debug('month picker index updated: %s', index);
 };
@@ -300,9 +497,60 @@ proto.updateMonthPickerValue = function() {
  */
 proto.updateDayPickerValue = function() {
   if (!this.value) { return; }
-  var index = this.value.getDate() - 1;
+  var value = this.value.getDate();
+  var index = this.dayValueToIndex(value);
   this.els.pickers.day.select(index);
   debug('day picker index updated: %s', index);
+};
+
+/**
+ * States if the current (or given) year
+ * is the year of the min date-range.
+ *
+ * @param  {Number}  year (optional)
+ * @return {Boolean}
+ * @private
+ */
+proto.isMinYear = function(year) {
+  return (year || this.value.getFullYear()) === this.min.getFullYear();
+};
+
+/**
+ * States if the current (or given) year
+ * is the year of the max date-range.
+ *
+ * @param  {Number}  year (optional)
+ * @return {Boolean}
+ * @private
+ */
+proto.isMaxYear = function(year) {
+  return (year || this.value.getFullYear()) === this.max.getFullYear();
+};
+
+/**
+ * States if the current (or given) month
+ * is the month of the max date-range.
+ *
+ * @param  {Number}  month (optional)
+ * @param  {Number}  year (optional)
+ * @return {Boolean}
+ * @private
+ */
+proto.isMinMonth = function(month, year) {
+  return this.isMinYear(year) && (month || this.value.getMonth()) === this.min.getMonth();
+};
+
+/**
+ * States if the current (or given) month
+ * is the month of the max date-range.
+ *
+ * @param  {Number}  month (optional)
+ * @param  {Number}  year (optional)
+ * @return {Boolean}
+ * @private
+ */
+proto.isMaxMonth = function(month, year) {
+  return this.isMaxYear(year) && (month || this.value.getMonth()) === this.max.getMonth();
 };
 
 /**
@@ -317,9 +565,39 @@ proto.inRange = function(date) {
   return time <= this.max.getTime() && time >= this.min.getTime();
 };
 
+/**
+ * Create a list of year strings
+ * based on the date-picker's current
+ * date-range.
+ *
+ * @return {Array}  ['2000', '2001', '2002', ...]
+ */
+proto.createYearList = function() {
+  var min = this.min.getFullYear();
+  var max = this.max.getFullYear();
+  var list = [];
+  var date;
+
+  for (var i = min; i <= max; i++) {
+    date = new Date(i, 0, 1);
+    list.push(localeFormat(date, '%Y'));
+  }
+
+  return list;
+};
+
+/**
+ * Create a list of localized month strings
+ * based on the date range of the current year.
+ *
+ * Usually this will be 12 months, unless
+ * the year is currently the max/min year,
+ * then not all the months will be available.
+ *
+ * @return {Array}  ['Jan', 'Feb', 'Mar', ...]
+ */
 proto.createMonthList = function() {
   var currentYear = this.value.getFullYear();
-  var years = this.max.getFullYear() - this.min.getFullYear();
   var date = new Date(currentYear, 0, 1);
   var list = [];
 
@@ -333,6 +611,43 @@ proto.createMonthList = function() {
   return list;
 };
 
+/**
+ * Create a list of day strings based
+ * on the days available in the current
+ * month and date-range.
+ *
+ * @return {Array}  ['1', '2', '3', ...]
+ */
+proto.createDayList = function() {
+  var month = this.value.getMonth();
+  var year = this.value.getFullYear();
+  var last = this.isMaxMonth() ? this.max.getDate() : getDaysInMonth(year, month);
+  var first = this.isMinMonth() ? this.min.getDate() : 1;
+  var list = [];
+
+  for (var i = first; i <= last; i++) {
+    var date = new Date(year, month, i);
+    list.push(localeFormat(date, '%d'));
+  }
+
+  return list;
+};
+
+/**
+ * Explictly set's the picker heights based
+ * on the `style.height` of the component.
+ *
+ * We give users an opportunity to define
+ * an explicit height to optimize setup
+ * so that we don't have to read
+ * from the DOM.
+ *
+ * Example:
+ *
+ *   <gaia-picker-date style="height:300px">
+ *
+ * @private
+ */
 proto.setPickerHeights = function() {
   var height = parseInt(this.style.height, 10);
   if (!height) { return; }
@@ -342,6 +657,13 @@ proto.setPickerHeights = function() {
   debug('set picker heights: %s', height);
 };
 
+/**
+ * Updates the order of the three
+ * pickers to reflect the current
+ * date format.
+ *
+ * @private
+ */
 proto.updatePickerOrder = function() {
   var order = getDateComponentOrder();
   order.forEach(function(type, i) {
@@ -363,13 +685,41 @@ proto.setAttribute = function(name, value) {
   this.els.inner.setAttribute(name, value);
 };
 
+/**
+ * Clamp's given date between
+ * max/min date range.
+ *
+ * @param  {Date} date
+ * @return {Date}
+ * @private
+ */
 proto.clampDate = function(date) {
   if (date > this.max) { return new Date(this.max.getTime()); }
   else if (date < this.min) { return new Date(this.min.getTime()); }
   else { return date; }
 };
 
-proto.attrs = {
+/**
+ * When an attribute changes, we check
+ * to see if it was one of the component's
+ * defined attributes, and then set it
+ * to the newly changed value.
+ *
+ * @param  {String} key
+ * @param  {String} from
+ * @param  {String} to
+ * @private
+ */
+proto.attributeChangedCallback = function(key, from, to) {
+  if (attributes[key]) { this[key] = to; }
+};
+
+/**
+ * List of public attributes.
+ *
+ * @type {Object}
+ */
+var attributes = {
   value: {
     get: function() { return this._value; },
     set: function(value) {
@@ -408,7 +758,8 @@ proto.attrs = {
   }
 };
 
-Object.defineProperties(proto, proto.attrs);
+// Define the public attributes as properties
+Object.defineProperties(proto, attributes);
 
 proto.shadowStyleHack = function() {
   if (hasShadowCSS) { return; }
@@ -468,78 +819,73 @@ if (!hasShadowCSS) {
  * Utils
  */
 
-function on(el, name, fn, ctx) {
-  el.addEventListener(name, fn.bind(ctx));
-}
-
+/**
+ * Get the number of days in a month.
+ *
+ * @param  {Number} year   Full year
+ * @param  {Number} month  Month index
+ * @return {Number}
+ */
 function getDaysInMonth(year, month) {
-  debug('days in month: %s, year: %s', month, year);
-  var date = new Date(year, month + 1, 0);
-  return date.getDate();
+  return new Date(year, month + 1, 0).getDate();
 }
 
-// var mozL10nDateFormat = navigator.mozL10n && navigator.mozL10n.DateTimeFormat;
-// var localFormat = mozL10nDateFormat ? mozL10nDateFormat().localeFormat : localeFormat;
-
+/**
+ * Format a `Date` based on the given token.
+ *
+ * `navigator.mozL10n.DateTimeFormat` is used
+ * if available, falling back to simple en-us
+ * solution.
+ *
+ * Example:
+ *
+ *   localeFormat(new Date(2014, 09, 21), '%A'); //=> Tuesday
+ *   localeFormat(new Date(2014, 09, 21), '%b'); //=> Oct
+ *
+ * @param  {Date}   date
+ * @param  {String} token ['%b','%A','%Y','%d']
+ * @return {String}
+ * @private
+ */
 function localeFormat(date, token) {
+  return localeFormat.mozL10n(date, token)
+    || localeFormat.fallback(date, token);
+}
+
+/**
+ * Wrapper around `navigator.mozL10n.DateTimeFormat`
+ *
+ * @param  {Date}   date
+ * @param  {String} token ['%b','%A','%Y','%d']
+ * @return {String}
+ * @private
+ */
+localeFormat.mozL10n = function(date, tokens) {
+  var dateTimeFormat = navigator.mozL10n && navigator.mozL10n.DateTimeFormat;
+  if (dateTimeFormat) { return dateTimeFormat().localeFormat(date, token); }
+};
+
+/**
+ * A fallback for `navigator.mozL10n.DateTimeFormat`
+ *
+ * @param  {Date}   date
+ * @param  {String} token ['%b','%A','%Y','%d']
+ * @return {String}
+ * @private
+ */
+localeFormat.fallback = function(date, token) {
+  var strings = {
+    days: ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'],
+    months: ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
+  };
+
   switch (token) {
     case '%b': return strings.months[date.getMonth()];
     case '%A': return strings.days[date.getDay()];
     case '%Y': return date.getFullYear();
     case '%d': return date.getDate();
   }
-}
-
-var strings = {
-  days: [
-    'Sunday',
-    'Monday',
-    'Tuesday',
-    'Wednesday',
-    'Thursday',
-    'Friday',
-    'Saturday'
-  ],
-
-  months: [
-    'Jan',
-    'Feb',
-    'Mar',
-    'Apr',
-    'May',
-    'Jun',
-    'Jul',
-    'Aug',
-    'Sep',
-    'Oct',
-    'Nov',
-    'Dec'
-  ]
 };
-
-function createYearList(min, max) {
-  var list = [];
-  var date;
-
-  for (var i = min.getFullYear(); i <= max.getFullYear(); i++) {
-    date = new Date(i, 0, 1);
-    list.push(localeFormat(date, '%Y'));
-  }
-
-  return list;
-}
-
-function createDayList(year, month) {
-  var days = getDaysInMonth(year, month);
-  var list = [];
-
-  for (var i = 1; i <= days; i++) {
-    var date = new Date(year, month, i);
-    list.push(localeFormat(date, '%d'));
-  }
-
-  return list;
-}
 
 /**
  * Convert a string to a `Date` object.
@@ -555,10 +901,12 @@ function stringToDate(string) {
   return date;
 }
 
-function getDateTimeFormat() {
-  return navigator.mozL10n && navigator.mozL10n.get('dateTimeFormat_%x') || '%m/%d/%Y';
-}
-
+/**
+ * Derives the date picker order based
+ * on the current date format.
+ *
+ * @return {Array}
+ */
 function getDateComponentOrder() {
   var format = getDateTimeFormat();
   var tokens = format.match(/(%E.|%O.|%.)/g);
@@ -592,6 +940,10 @@ function getDateComponentOrder() {
   }
 
   return order.length === 3 ? order : fallback;
+}
+
+function getDateTimeFormat() {
+  return navigator.mozL10n && navigator.mozL10n.get('dateTimeFormat_%x') || '%m/%d/%Y';
 }
 
 // Register and return the constructor

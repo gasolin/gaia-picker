@@ -58,7 +58,6 @@ proto.doc = document;
  */
 proto.createdCallback = function() {
   this.createShadowRoot();
-  this.shadowRoot.host = this; // Remove once in platform
   this.shadowRoot.innerHTML = template;
 
   // Get els
@@ -84,8 +83,6 @@ proto.createdCallback = function() {
   // firing during user configuration stage.
   setTimeout(this.addListeners.bind(this), 500);
   setTimeout(this.setup.bind(this));
-
-  this.created = true;
 };
 
 proto.addListeners = function() {

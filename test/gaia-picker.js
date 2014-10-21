@@ -30,42 +30,64 @@ suite('GaiaPicker', function() {
   });
 
   setup(function() {
-    this.sandbox = sinon.sandbox.create();
+    this.sinon = sinon.sandbox.create();
     container = document.createElement('div');
     document.body.appendChild(container);
-    this.picker = create();
   });
 
   teardown(function() {
-    this.sandbox.restore();
+    this.sinon.restore();
     proto.doc = document;
     container.remove();
   });
 
   test('It has an item height of 50px', function() {
-    assert.equal(this.picker.itemHeight, 50);
-  });
-
-  test('It selects the first item in the list by default', function() {
-    assert.isTrue(this.picker.children[0].classList.contains('selected'));
+    var el = create();
+    assert.equal(el.itemHeight, 50);
   });
 
   suite('GaiaPicker#setup()', function() {
+    setup(function() {
+      this.clock = sinon.useFakeTimers();
+      this.el = create();
+      this.clock.tick(500);
+    });
+
+    teardown(function() {
+      this.clock.restore();
+    });
+
+    test('It selects the first item in the list by default', function() {
+      assert.isTrue(this.el.children[0].classList.contains('selected'));
+    });
+
     test('It sets extra bottom-padding to account for the y-offset of the list', function () {
-      assert.equal(create().els.list.style.paddingBottom, '150px');
-      assert.equal(create({ height: 400 }).els.list.style.paddingBottom, '350px');
-      assert.equal(create({ height: 550 }).els.list.style.paddingBottom, '500px');
+      var el = create();
+      this.clock.tick(500);
+
+      assert.equal(el.els.list.style.paddingBottom, '150px');
+
+      el = create({ height: 400 });
+      this.clock.tick(500);
+
+      assert.equal(el.els.list.style.paddingBottom, '350px');
+
+      el = create({ height: 550 });
+      this.clock.tick(500);
+
+      assert.equal(el.els.list.style.paddingBottom, '500px');
     });
 
     test('It flags as setup', function() {
-      assert.isTrue(this.picker.isSetup);
+      assert.isTrue(this.el.isSetup);
     });
 
     test('It waits until document has loaded', function() {
       proto.doc = { readyState: 'not-complete' };
-      this.sandbox.spy(proto, 'select');
+      this.sinon.spy(proto, 'select');
 
       var picker = create();
+      this.clock.tick(500);
 
       sinon.assert.notCalled(picker.select);
 
@@ -77,10 +99,11 @@ suite('GaiaPicker', function() {
 
     test('It calls .select() with the last called value', function() {
       proto.doc = { readyState: 'not-complete' };
-      this.sandbox.spy(proto, 'select');
+      this.sinon.spy(proto, 'select');
 
       var picker = create();
       picker.select(10);
+      this.clock.tick(500);
 
       proto.doc.readyState = 'complete';
       dispatchEvent(new CustomEvent('load'));
@@ -109,13 +132,7 @@ suite('GaiaPicker', function() {
         <li>11</li>
         <li>12</li>
       </gaia-picker>`;
+
     return container.firstElementChild;
   }
-
-  // function create() {
-  //   var el = new GaiaPicker();
-  //   el.fill([1, 2, 3, 4, 5, 6, 7, 8, 9, 10 ]);
-  //   container.appendChild(el);
-  //   return el;
-  // }
 });
