@@ -6,37 +6,20 @@
 require('gaia-picker');
 
 /**
- * Detects presence of shadow-dom
- * CSS selectors.
- *
- * @return {Boolean}
- */
-var hasShadowCSS = (function() {
-  try { document.querySelector(':host'); return true; }
-  catch (e) { return false; }
-})();
-
-/**
- * Simple debug logger
- *
- * @param  {String} value
- */
-var debug = !~location.search.indexOf(n) ? function() {} : function() {
-  arguments[0] = `[${n}]  ` + arguments[0];
-  console.log.apply(console, arguments);
-};
-
-/**
  * Element prototype, extends from HTMLElement
  *
  * @type {Object}
  */
 var proto = Object.create(HTMLElement.prototype);
 
-
+/**
+ * Default max/min dates.
+ *
+ * @type {Object}
+ */
 var defaults = {
   min: new Date('1900', '0', '01'),
-  max: new Date('2099', '0', '01')
+  max: new Date('2099', '11', '31')
 };
 
 /**
@@ -71,6 +54,14 @@ proto.createdCallback = function() {
   // Bind listeners later to avoid strange
   // things happening during setup.
   setTimeout(this.addListeners.bind(this));
+};
+
+proto.attachedCallback = function() {
+  debug('attached');
+};
+
+proto.detachedCallback = function() {
+  debug('detached');
 };
 
 /**
@@ -212,20 +203,13 @@ proto.dayValueToIndex = function(value) {
  */
 proto.setYear = function(year) {
   debug('set year: %s', year);
-  year = Number(year);
-
-  // Exit if year didn't change
-  if (year === this.value.getFullYear()) { return; }
-
   year = this.normalizeYear(year);
-
+  if (year === this.value.getFullYear()) { return debug('didn\'t change'); }
   var month = this.normalizeMonth(this.value.getMonth(), { year: year });
   var day = this.normalizeDay(this.value.getDate(), { month: month, year: year });
-
   this.value.setDate(day);
   this.value.setMonth(month);
   this.value.setFullYear(year);
-
   this.updateYearPickerValue();
   this.updateMonthPicker();
   this.updateDayPicker();
@@ -249,14 +233,9 @@ proto.setYear = function(year) {
  */
 proto.setMonth = function(month) {
   debug('set month: %s', month);
-  month = Number(month);
-
-  // Exit if nothing changed
-  if (month === this.value.getMonth()) { return; }
-
   month = this.normalizeMonth(month);
+  if (month === this.value.getMonth()) { return debug('didn\'t change'); }
   var day = this.normalizeDay(this.value.getDate(), { month: month });
-
   this.value.setDate(day);
   this.value.setMonth(month);
   this.updateMonthPickerValue();
@@ -278,33 +257,35 @@ proto.setMonth = function(month) {
  * @public
  */
 proto.setDay = function(day) {
-  day = Number(day);
-  if (day === this.value.getDate()) { return; }
+  debug('set day: %s');
   day = this.normalizeDay(day);
+  if (day === this.value.getDate()) { return debug('didn\'t change'); }
   this.value.setDate(day);
   this.updateDayPickerValue();
 };
 
 /**
- * Takes a year and 'normalizes' it to
- * a year that exists in the picker's
- * date range.
+ * Normalizes value to a 'valid' year.
+ *
+ * A 'valid' year is a year within
+ * the picker's date-range.
  *
  * @param  {Number} year
  * @return {Number}
+ * @private
  */
 proto.normalizeYear = function(year) {
   var max = this.max.getFullYear();
   var min = this.min.getFullYear();
-  return year > max ? max
-    : year < min ? min
-    : year;
+  return Math.max(min, Math.min(max, Number(year)));
 };
 
 /**
- * Takes a given month value and 'normalizes'
- * it to a month that exists in the overall
- * picker date range.
+ * Normalizes value to a 'valid' month.
+ *
+ * A 'valid' month is a month within the
+ * current (or given) year, and be within
+ * the picker's current date-range.
  *
  * Options:
  *
@@ -313,18 +294,24 @@ proto.normalizeYear = function(year) {
  * @param  {Number} month
  * @param  {Object} options
  * @return {Number}
+ * @private
  */
 proto.normalizeMonth = function(month, options) {
   var year = options && options.year;
+  month = Number(month);
+  month = Math.min(11, Math.max(month, 0));
   if (this.isMinYear(year)) { month = Math.max(this.min.getMonth(), month); }
   if (this.isMaxYear(year)) { month = Math.min(this.max.getMonth(), month); }
   return month;
 };
 
 /**
- * Takes a given day value and 'normalizes'
- * it to a day that exists in the year,
- * month and overall picker date range.
+ * Normalizes a value to a 'valid' day.
+ *
+ * A 'valid' day is a day that exist
+ * in the current (or given) month of
+ * the current (or given) year, and
+ * within the picker's date-range.
  *
  * Options:
  *
@@ -334,17 +321,13 @@ proto.normalizeMonth = function(month, options) {
  * @param  {Number} day
  * @param  {Object} options
  * @return {Number}
+ * @private
  */
 proto.normalizeDay = function(day, options) {
   var year = (options && options.year) || this.value.getFullYear();
   var month = (options && options.month) || this.value.getMonth();
   var total = getDaysInMonth(year, month);
-
-  // Make sure the day doesn't
-  // exceed the total available days
-  day = Math.min(day, total);
-
-  // Clamp it in the date range
+  day = Math.max(0, Math.min(Number(day), total));
   if (this.isMinMonth(month, year)) { day = Math.max(this.min.getDate(), day); }
   if (this.isMaxMonth(month, year)) { day = Math.min(this.max.getDate(), day); }
   return day;
@@ -373,23 +356,18 @@ proto.updatePickers = function() {
 proto.updateYearPicker = function() {
   debug('update years');
   if (!this.min || !this.max) { return; }
-
   var list = this.createYearList();
   var picker = this.els.pickers.year;
-  var lengthChanged = picker.length !== list.length;
   var firstItem = picker.children[0];
+  var firstItemVal = firstItem && firstItem.textContent;
+  var changed = list.length !== picker.length
+    || firstItemVal !== list[0];
 
-  // If the length of the list is different
-  // or the value of the first item is different
-  // we can assume the list has changed.
-  var changed = lengthChanged
-    || (firstItem && firstItem.textContent !== list[0]);
-
-  if (!changed) { return; }
+  if (!changed) { return debug('didn\'t change'); }
 
   this.els.pickers.year.fill(list);
   this.updateYearPickerValue();
-  debug('years updated', list);
+  debug('year picker updated', list);
 };
 
 /**
@@ -407,16 +385,12 @@ proto.updateYearPicker = function() {
 proto.updateMonthPicker = function() {
   debug('update months picker');
   if (!this.value) { return; }
-
   var picker = this.els.pickers.month;
-  var firstItem = picker.children[0];
   var list = this.createMonthList();
-
-  // If the length of the list is different
-  // or the value of the first item is different
-  // we can assume the list has changed.
-  var changed = picker.length !== list.length ||
-    firstItem && firstItem.textContent !== list[0];
+  var firstItem = picker.children[0];
+  var firstItemVal = firstItem && firstItem.textContent;
+  var changed = list.length !== picker.length
+    || firstItemVal !== list[0];
 
   if (!changed) { return debug('didn\'t change'); }
 
@@ -431,7 +405,8 @@ proto.updateMonthPicker = function() {
  *
  * We make an assumption that the list
  * didn't change if the length remains
- * the same as the picker's.
+ * the same and the first value is the
+ * same.
  *
  * @private
  */
@@ -439,17 +414,17 @@ proto.updateDayPicker = function() {
   debug('update days');
   if (!this.value) { return; }
   var picker = this.els.pickers.day;
-  var year = this.value.getFullYear();
-  var month = this.value.getMonth();
   var list = this.createDayList();
-  var changed = list.length !== picker.length;
-  var day = this.value.getDate();
+  var firstItem = picker.children[0];
+  var firstItemVal = firstItem && firstItem.textContent;
+  var changed = list.length !== picker.length
+    || firstItemVal !== list[0];
 
   if (!changed) { return debug('days didn\'t change'); }
 
   picker.fill(list);
   this.updateDayPickerValue();
-  debug('days updated', list);
+  debug('day picker updated', list);
 };
 
 /**
@@ -806,6 +781,17 @@ gaia-picker:after {
   <gaia-picker class="years"></gaia-picker>
 </div>`;
 
+/**
+ * Detects presence of shadow-dom
+ * CSS selectors.
+ *
+ * @return {Boolean}
+ */
+var hasShadowCSS = (function() {
+  try { document.querySelector(':host'); return true; }
+  catch (e) { return false; }
+})();
+
 // If the browser doesn't support shadow-css
 // selectors yet, we update the template
 // to use the shim classes instead.
@@ -860,7 +846,7 @@ function localeFormat(date, token) {
  * @return {String}
  * @private
  */
-localeFormat.mozL10n = function(date, tokens) {
+localeFormat.mozL10n = function(date, token) {
   var dateTimeFormat = navigator.mozL10n && navigator.mozL10n.DateTimeFormat;
   if (dateTimeFormat) { return dateTimeFormat().localeFormat(date, token); }
 };
@@ -945,6 +931,16 @@ function getDateComponentOrder() {
 function getDateTimeFormat() {
   return navigator.mozL10n && navigator.mozL10n.get('dateTimeFormat_%x') || '%m/%d/%Y';
 }
+
+/**
+ * Simple debug logger
+ *
+ * @param  {String} value
+ */
+var debug = !~location.search.indexOf(n) ? function() {} : function() {
+  arguments[0] = `[${n}]  ` + arguments[0];
+  console.log.apply(console, arguments);
+};
 
 // Register and return the constructor
 // and expose `protoype` (bug 1048339)

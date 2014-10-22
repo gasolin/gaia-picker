@@ -92,10 +92,12 @@ proto.addListeners = function() {
 };
 
 proto.attachedCallback = function() {
+  debug('attached');
   this.setup();
 };
 
 proto.detachedCallback = function() {
+  debug('detached');
   this.teardown();
 };
 
@@ -138,12 +140,12 @@ proto.setup = function() {
   debug('setup');
 
   // We can't setup without DOM context
-  if (!inDOM(this)) { return; }
+  if (!inDOM(this)) { return debug('not in dom'); }
 
   // Defer setup until document has loaded
   if (this.doc.readyState !== 'complete') {
     addEventListener('load', this.setup);
-    return;
+    return debug('doc not loaded');
   }
 
   this.isSetup = true;
@@ -358,6 +360,7 @@ var template = `
 .gaia-picker-inner {
   position: relative;
   width: 100%;
+  color: var(--title-color);
 }
 
 /** Gradients
