@@ -70,11 +70,15 @@ proto.createdCallback = function() {
   this.setup = this.setup.bind(this);
   this.shadowStyleHack();
 
+  this.circular = this.hasAttribute('circular');
+
   this.scroll = new Scroll({
     el: this.els.list,
     itemHeight: this.itemHeight,
     containerHeight: this.height,
-    snap: true
+    snap: true,
+    circular: this.circular,
+    parent: this
   });
 
   this.height = this.getAttribute('height');
@@ -185,8 +189,9 @@ proto.reflow = function() {
 
   if (!this.isSetup) { return; }
 
+
   var container = this.height || this.els.inner.clientHeight;
-  var padding = container - this.itemHeight;
+  var padding = this.circular ? 0 : container - this.itemHeight;
   this.els.list.style.paddingBottom = padding + 'px';
 
   // Optimize scroller
