@@ -19,6 +19,7 @@ module.exports = function(config) {
       'gaia-picker-time.js',
       'gaia-picker-date.js',
       'test/gaia-picker.js',
+      'test/snap-scroll.js',
       'test/gaia-picker-time.js',
       'test/gaia-picker-date.js'
     ]
