@@ -7,16 +7,16 @@
   <link rel="stylesheet" type="text/css" href="bower_components/base/base.css">
   <link rel="stylesheet" type="text/css" href="bower_components/gaia-theme/gaia-theme.css">
   <link rel="stylesheet" type="text/css" href="bower_components/gaia-fonts/style.css">
-  <script src="bower_components/gaia-theme/lib/gaia-theme-selector.js"></script>
+  <!-- <script src="bower_components/gaia-theme/lib/gaia-theme-selector.js"></script> -->
   <script src="lib/snap-scroll.js"></script>
-  <script src="gaia-picker.js"></script>
-  <script src="gaia-picker-time.js"></script>
-  <script src="gaia-picker-date.js"></script>
+  <!-- <script src="gaia-picker.js"></script> -->
+  <!-- <script src="gaia-picker-time.js"></script> -->
+  <!-- <script src="gaia-picker-date.js"></script> -->
   <style>
 
   .simple-list {
     padding: 0;
-    height: 200px;
+    height: 400px;
     overflow: hidden;
     box-shadow: inset 0 1px 4px rgba(0,0,0,0.1);
   }
@@ -27,6 +27,10 @@
     line-height: 40px;
     height: 40px;
     padding: 0 1rem;
+  }
+
+  .simple-list_inner > li {
+    background: red;
   }
 
   .simple-list li:after {
@@ -81,7 +85,7 @@
     <li>December</li>
   </gaia-picker> -->
 
-  <gaia-picker-date></gaia-picker-date>
+<!--   <gaia-picker-date></gaia-picker-date>
 
   <gaia-picker-date
     style="height:200px"
@@ -100,7 +104,7 @@
     style="height:200px"
     min="2014-11-01"
     max="2015-03-01">
-  </gaia-picker-date>
+  </gaia-picker-date> -->
 
   <!-- <gaia-picker-time format="12hr" style="height:200px"></gaia-picker-time> -->
   <!-- <gaia-picker-time style="height:200px"></gaia-picker-time> -->
@@ -112,7 +116,7 @@
   var scroll = new Scroll({
     list: document.querySelector('.simple-list_inner'),
     circular: true,
-    snap: true,
+    // snap: true,
   });
   </script>
 </body>

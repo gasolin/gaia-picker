@@ -142,16 +142,17 @@ proto.onPanning = function(e) {
 };
 
 proto.onSnapped = function(e) {
-  clearTimeout(this.changedTimeout);
+  // clearTimeout(this.changedTimeout);
   debug('snapped: %s', e.detail.index);
   this.selectItem(e.detail.index);
-  this.changedTimeout = setTimeout(function() {
+  // this.changedTimeout = setTimeout(function() {
+    debug('changed');
     this.dispatch('changed', {
       value: this.value,
       selected: this.selected,
       index: this.index
     });
-  }.bind(this), 300);
+  // }.bind(this), 600);
 };
 
 /**
@@ -403,15 +404,15 @@ var template = `
   height: 50px;
   pointer-events: none;
   background: linear-gradient(to bottom,
-    rgba(244,244,244,1) 0%,
-    rgba(244,244,244,0) 100%);
+    var(--background) 0%,
+    transparent 100%);
 }
 
 .gaia-picker-inner:after {
   top: auto; bottom: 0;
   background: linear-gradient(to top,
-    rgba(244,244,244,1) 0%,
-    rgba(244,244,244,0) 100%);
+    var(--background) 0%,
+    transparent 100%);
 }
 
 /** List

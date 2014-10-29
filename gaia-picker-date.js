@@ -773,19 +773,24 @@ gaia-picker {
   flex: 1;
 }
 
-gaia-picker:after {
+.divider {
   content: '';
   position: absolute;
-  left: 0; top: 0;
+  top: 0;
   z-index: -1;
   width: 1px;
   height: 100%;
   background: var(--border-color);
 }
 
+.divider-1 { left: 33.33%; }
+.divider-2 { left: 66.66%; }
+
 </style>
 
 <div class="inner">
+  <div class="divider divider-1"></div>
+  <div class="divider divider-2"></div>
   <gaia-picker class="days" circular></gaia-picker>
   <gaia-picker class="months" circular></gaia-picker>
   <gaia-picker class="years"></gaia-picker>
