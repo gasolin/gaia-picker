@@ -134,7 +134,7 @@ proto.onListTap = function(e) {
  * @return {Element|null}
  */
 proto.itemFromTarget = function(el) {
-  return el && (el.tagName === 'LI' ? el : this.getChild(el.parentNode));
+  return el && (el.tagName === 'LI' ? el : this.itemFromTarget(el.parentNode));
 };
 
 proto.onPanning = function(e) {
@@ -142,17 +142,17 @@ proto.onPanning = function(e) {
 };
 
 proto.onSnapped = function(e) {
-  // clearTimeout(this.changedTimeout);
+  clearTimeout(this.changedTimeout);
   debug('snapped: %s', e.detail.index);
   this.selectItem(e.detail.index);
-  // this.changedTimeout = setTimeout(function() {
+  this.changedTimeout = setTimeout(function() {
     debug('changed');
     this.dispatch('changed', {
       value: this.value,
       selected: this.selected,
       index: this.index
     });
-  // }.bind(this), 600);
+  }.bind(this), 600);
 };
 
 /**
@@ -310,7 +310,9 @@ proto.shadowStyleHack = function() {
 
 proto.attrs = {
   height: {
-    get: function() { return parseInt(this.style.height, 10); }
+    get: function() {
+      return parseInt(this.style.height, 10) || this.clientHeight;
+    }
   },
 
   value: {

@@ -5,6 +5,8 @@
 
 require('gaia-picker');
 
+var DEBUG = true;
+
 /**
  * Element prototype, extends from HTMLElement
  *
@@ -947,20 +949,19 @@ function getDateTimeFormat() {
   return navigator.mozL10n && navigator.mozL10n.get('dateTimeFormat_%x') || '%m/%d/%Y';
 }
 
-/**
- * Simple debug logger
- *
- * @param  {String} value
- */
-var debug = !~location.search.indexOf(n) ? function() {} : function() {
-  arguments[0] = `[${n}]  ` + arguments[0];
-  console.log.apply(console, arguments);
-};
-
 // Register and return the constructor
 // and expose `protoype` (bug 1048339)
 module.exports = document.registerElement('gaia-picker-date', { prototype: proto });
 module.exports.proto = proto;
+
+var debug;
+module.exports.debug = function(enabled) {
+  debug = enabled ? function() {
+    arguments[0] = '[gaia-picker-date]  ' + arguments[0];
+    console.log.apply(console, arguments);
+  } : function(){};
+};
+module.exports.debug(DEBUG);
 
 },n);})(typeof define=='function'&&define.amd?define
 :(function(w){'use strict';return typeof module=='object'?function(c){

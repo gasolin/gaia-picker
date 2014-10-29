@@ -77,8 +77,6 @@ suite('GaiaPicker', function() {
     });
 
     test('It pans to follow you finger', function() {
-      var now = Date.now();
-
       touchEvent(this.list, 'touchstart', 100, 100);
 
       touchEvent(window, 'touchmove', 100, 95);
@@ -98,7 +96,6 @@ suite('GaiaPicker', function() {
       clock = sinon.useFakeTimers();
 
       var callback = sinon.spy();
-      var now;
 
       this.list.addEventListener('tap', callback);
 

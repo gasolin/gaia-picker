@@ -7,16 +7,16 @@
   <link rel="stylesheet" type="text/css" href="bower_components/base/base.css">
   <link rel="stylesheet" type="text/css" href="bower_components/gaia-theme/gaia-theme.css">
   <link rel="stylesheet" type="text/css" href="bower_components/gaia-fonts/style.css">
-  <!-- <script src="bower_components/gaia-theme/lib/gaia-theme-selector.js"></script> -->
+  <script src="bower_components/gaia-theme/lib/gaia-theme-selector.js"></script>
   <script src="lib/snap-scroll.js"></script>
-  <!-- <script src="gaia-picker.js"></script> -->
-  <!-- <script src="gaia-picker-time.js"></script> -->
-  <!-- <script src="gaia-picker-date.js"></script> -->
+  <script src="gaia-picker.js"></script>
+  <script src="gaia-picker-time.js"></script>
+  <script src="gaia-picker-date.js"></script>
   <style>
 
   .simple-list {
     padding: 0;
-    height: 400px;
+    height: 300px;
     overflow: hidden;
     box-shadow: inset 0 1px 4px rgba(0,0,0,0.1);
   }
@@ -30,7 +30,7 @@
   }
 
   .simple-list_inner > li {
-    background: red;
+    /*background: red;*/
   }
 
   .simple-list li:after {
@@ -42,6 +42,15 @@
     background: var(--border-color);
   }
 
+  .test {
+    position: absolute;
+    left: 0; top: 0;
+    width: 100px;
+    height: 100px;
+    margin: -50px;
+    background: red;
+  }
+
   </style>
 </head>
 
@@ -50,8 +59,9 @@
 
   <h1 class="large l-align-center l-mb-small">&lt;gaia-picker&gt;</h1>
 
+  <div class="test" id="test"></div>
 
-  <ul class="simple-list">
+<!--   <ul class="simple-list">
     <div class="simple-list_inner">
       <li>January</li>
       <li>February</li>
@@ -66,9 +76,7 @@
       <li>November</li>
       <li>December</li>
     </div>
-  </ul>
-
-  <hr/>
+  </ul> -->
 
 <!--   <gaia-picker circular style="height:300px">
     <li>January</li>
@@ -85,9 +93,9 @@
     <li>December</li>
   </gaia-picker> -->
 
-<!--   <gaia-picker-date></gaia-picker-date>
+  <!-- <gaia-picker-date style="height:200px"></gaia-picker-date> -->
 
-  <gaia-picker-date
+<!--   <gaia-picker-date
     style="height:200px"
     min="1967-05-02"
     max="2024-12-31"
@@ -111,13 +119,24 @@
 
   <script>
 
+  var frame;
+  var el = test;
+  addEventListener('touchmove', function(e) {
+    frame = frame || requestAnimationFrame(function() {
+      var touch = e.touches[0];
+      frame = null;
+      el.style.transform = 'translate(' + touch.pageX + 'px,' + touch.pageY + 'px)';
+      el.textContent = touch.pageY;
+    });
+  });
+
   var Scroll = window['snap-scroll'];
 
-  var scroll = new Scroll({
-    list: document.querySelector('.simple-list_inner'),
-    circular: true,
-    // snap: true,
-  });
+  // var scroll = new Scroll({
+  //   list: document.querySelector('.simple-list_inner'),
+  //   circular: true,
+  //   snap: true,
+  // });
   </script>
 </body>
 </html>
