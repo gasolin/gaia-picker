@@ -17,6 +17,7 @@ suite('GaiaPickerTime', function() {
   var container;
 
   setup(function() {
+    this.clock = sinon.useFakeTimers();
     container = document.createElement('div');
     document.body.appendChild(container);
   });

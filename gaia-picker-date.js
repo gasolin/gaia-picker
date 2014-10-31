@@ -5,7 +5,7 @@
 
 require('gaia-picker');
 
-var DEBUG = true;
+var DEBUG = 0;
 
 /**
  * Element prototype, extends from HTMLElement
@@ -111,8 +111,8 @@ proto.addListeners = function() {
  * @private
  */
 proto.onYearChanged = function(e) {
-  debug('year changed: %s', e.detail.value);
-  this.setYear(e.detail.value);
+  debug('year changed to index: %s', e.detail.index);
+  this.setYear(this.yearIndexToValue(e.detail.index));
 };
 
 /**
@@ -137,6 +137,14 @@ proto.onMonthChanged = function(e) {
 proto.onDayChanged = function(e) {
   debug('day changed: %s', e.detail.index);
   this.setDay(this.dayIndexToValue(e.detail.index));
+};
+
+proto.yearIndexToValue = function(index) {
+  return this.min.getFullYear() + index;
+};
+
+proto.yearValueToIndex = function(value) {
+  return value - this.min.getFullYear();
 };
 
 /**
@@ -205,6 +213,7 @@ proto.dayValueToIndex = function(value) {
  */
 proto.setYear = function(year) {
   debug('set year: %s', year);
+  if (!year) { return; }
   year = this.normalizeYear(year);
   if (year === this.value.getFullYear()) { return debug('didn\'t change'); }
   var month = this.normalizeMonth(this.value.getMonth(), { year: year });
@@ -235,6 +244,7 @@ proto.setYear = function(year) {
  */
 proto.setMonth = function(month) {
   debug('set month: %s', month);
+  if (isNaN(month)) { return; }
   month = this.normalizeMonth(month);
   if (month === this.value.getMonth()) { return debug('didn\'t change'); }
   var day = this.normalizeDay(this.value.getDate(), { month: month });
@@ -260,6 +270,7 @@ proto.setMonth = function(month) {
  */
 proto.setDay = function(day) {
   debug('set day: %s');
+  if (!day) { return; }
   day = this.normalizeDay(day);
   if (day === this.value.getDate()) { return debug('didn\'t change'); }
   this.value.setDate(day);
@@ -356,18 +367,17 @@ proto.updatePickers = function() {
  * @private
  */
 proto.updateYearPicker = function() {
-  debug('update years');
+  debug('update year picker');
   if (!this.min || !this.max) { return; }
   var list = this.createYearList();
   var picker = this.els.pickers.year;
-  var firstItem = picker.children[0];
-  var firstItemVal = firstItem && firstItem.textContent;
+  var firstItem = picker.items[0];
   var changed = list.length !== picker.length
-    || firstItemVal !== list[0];
+    || firstItem !== list[0];
 
   if (!changed) { return debug('didn\'t change'); }
 
-  this.els.pickers.year.fill(list);
+  picker.items = list;
   this.updateYearPickerValue();
   debug('year picker updated', list);
 };
@@ -389,16 +399,15 @@ proto.updateMonthPicker = function() {
   if (!this.value) { return; }
   var picker = this.els.pickers.month;
   var list = this.createMonthList();
-  var firstItem = picker.children[0];
-  var firstItemVal = firstItem && firstItem.textContent;
+  var firstItem = picker.items[0];
   var trimmed = list.length < 12;
   var changed = list.length !== picker.length
-    || firstItemVal !== list[0];
+    || firstItem !== list[0];
 
   if (!changed) { return debug('didn\'t change'); }
 
+  picker.items = list;
   picker.circular = !trimmed;
-  picker.fill(list);
   this.updateMonthPickerValue();
   debug('months picker updated', list);
 };
@@ -420,16 +429,14 @@ proto.updateDayPicker = function() {
   var picker = this.els.pickers.day;
   var days = this.createDayList();
   var list = days.value;
-  var daysInMonth = getDaysInMonth();
-  var firstItem = picker.children[0];
-  var firstItemVal = firstItem && firstItem.textContent;
+  var firstItem = picker.items[0];
   var changed = list.length !== picker.length
-    || firstItemVal !== list[0];
+    || firstItem !== list[0];
 
   if (!changed) { return debug('days didn\'t change'); }
 
   picker.circular = !days.trimmed;
-  picker.fill(list);
+  picker.items = list;
   this.updateDayPickerValue();
   debug('day picker updated', days);
 };
@@ -441,10 +448,10 @@ proto.updateDayPicker = function() {
  * @private
  */
 proto.updateYearPickerValue = function() {
-  debug('update years');
+  debug('update year picker value');
   if (!this.value) { return; }
-  var min = this.min.getFullYear();
-  var index = this.value.getFullYear() - min;
+  var year = this.value.getFullYear();
+  var index = this.yearValueToIndex(year);
   this.els.pickers.year.select(index);
   debug('year picker index updated: %s', index);
 };
@@ -457,14 +464,18 @@ proto.updateYearPickerValue = function() {
  * may not be the first month, therefore
  * indexes need to be adjusted.
  *
+ * We only animate the selection if the
+ *
  * @private
  */
 proto.updateMonthPickerValue = function() {
   debug('update month picker value');
   if (!this.value) { return; }
-  var value = this.value.getMonth();
-  var index = this.monthValueToIndex(value);
-  this.els.pickers.month.select(index);
+  var month = this.value.getMonth();
+  var picker = this.els.pickers.month;
+  var index = this.monthValueToIndex(month);
+  var animate = picker.value !== picker.items[index];
+  picker.select(index, { animate: animate });
   debug('month picker index updated: %s', index);
 };
 
@@ -480,8 +491,10 @@ proto.updateMonthPickerValue = function() {
 proto.updateDayPickerValue = function() {
   if (!this.value) { return; }
   var value = this.value.getDate();
+  var picker = this.els.pickers.day;
   var index = this.dayValueToIndex(value);
-  this.els.pickers.day.select(index);
+  var animate = picker.value !== picker.items[index];
+  picker.select(index, { animate: animate });
   debug('day picker index updated: %s', index);
 };
 
@@ -536,18 +549,6 @@ proto.isMaxMonth = function(month, year) {
 };
 
 /**
- * Specifies if the given Date is
- * in the picker's date range.
- *
- * @param  {Date} date
- * @return {Boolean}
- */
-proto.inRange = function(date) {
-  var time = date.getTime();
-  return time <= this.max.getTime() && time >= this.min.getTime();
-};
-
-/**
  * Create a list of year strings
  * based on the date-picker's current
  * date-range.
@@ -560,8 +561,8 @@ proto.createYearList = function() {
   var list = [];
   var date;
 
-  for (var i = min; i <= max; i++) {
-    date = new Date(i, 0, 1);
+  for (var year = min; year <= max; year++) {
+    date = new Date(year, 0 , 1, 1);
     list.push(localeFormat(date, '%Y'));
   }
 
@@ -579,15 +580,14 @@ proto.createYearList = function() {
  * @return {Array}  ['Jan', 'Feb', 'Mar', ...]
  */
 proto.createMonthList = function() {
-  var currentYear = this.value.getFullYear();
-  var date = new Date(currentYear, 0, 1);
+  var date = new Date(this.value.getFullYear(), 0, 1, 1);
+  var min = this.isMinYear() ? this.min.getMonth() : 0;
+  var max = this.isMaxYear() ? this.max.getMonth() : 11;
   var list = [];
 
-  for (var i = 0; i < 12; i++) {
-    date.setMonth(i);
-    if (this.inRange(date)) {
-      list.push(localeFormat(date, '%b'));
-    }
+  for (var month = min; month <= max; month++) {
+    date.setMonth(month);
+    list.push(localeFormat(date, '%b'));
   }
 
   return list;
@@ -864,8 +864,8 @@ function localeFormat(date, token) {
  * @private
  */
 localeFormat.mozL10n = function(date, token) {
-  var dateTimeFormat = navigator.mozL10n && navigator.mozL10n.DateTimeFormat;
-  if (dateTimeFormat) { return dateTimeFormat().localeFormat(date, token); }
+  var formatter = navigator.mozL10n && navigator.mozL10n.DateTimeFormat;
+  if (formatter) { return formatter().localeFormat(date, token); }
 };
 
 /**
@@ -946,7 +946,9 @@ function getDateComponentOrder() {
 }
 
 function getDateTimeFormat() {
-  return navigator.mozL10n && navigator.mozL10n.get('dateTimeFormat_%x') || '%m/%d/%Y';
+  return navigator.mozL10n
+    && navigator.mozL10n.get
+    && navigator.mozL10n.get('dateTimeFormat_%x') || '%m/%d/%Y';
 }
 
 // Register and return the constructor

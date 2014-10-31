@@ -15,7 +15,6 @@ suite('GaiaPicker', function() {
   setup(function() {
     this.sinon = sinon.sandbox.create();
     this.container = document.createElement('div');
-
     this.container.innerHTML = `
       <style>
         .list {
@@ -35,23 +34,26 @@ suite('GaiaPicker', function() {
       </style>
 
       <ul class="list">
-        <div class="inner">
-          <li>January</li>
-          <li>February</li>
-          <li>March</li>
-          <li>April</li>
-          <li>May</li>
-          <li>June</li>
-          <li>July</li>
-          <li>August</li>
-          <li>September</li>
-          <li>October</li>
-          <li>November</li>
-          <li>December</li>
-        </div>
+        <div class="inner"></div>
       </ul>`;
 
-    this.list = this.container.querySelector('.inner');
+    this.items = [
+      'January',
+      'February',
+      'March',
+      'April',
+      'May',
+      'June',
+      'July',
+      'August',
+      'September',
+      'October',
+      'November',
+      'December'
+    ];
+
+    this.outer = this.container.querySelector('.list');
+    this.inner = this.container.querySelector('.inner');
     document.body.appendChild(this.container);
 
     this.raf = sinon.stub();
@@ -59,6 +61,24 @@ suite('GaiaPicker', function() {
 
     // Make rAF sync
     this.raf.callsArg(0);
+
+    var items = this.items;
+    this.list = new SnapScroll({
+      outer: this.outer,
+      inner: this.inner,
+      length: items.length,
+      caf: this.caf,
+      raf: this.raf,
+      heights: {
+        item: 40,
+        outer: 200
+      },
+      render: function(el, index) {
+        el.textContent = items[index];
+      }
+    });
+
+    this.list.refresh();
   });
 
   teardown(function() {
@@ -68,28 +88,20 @@ suite('GaiaPicker', function() {
   });
 
   suite('basic', function() {
-    setup(function() {
-      this.scroll = new SnapScroll({
-        list: this.list,
-        caf: this.caf,
-        raf: this.raf
-      });
-    });
-
     test('It pans to follow you finger', function() {
-      touchEvent(this.list, 'touchstart', 100, 100);
+      touchEvent(this.inner, 'touchstart', 100, 100);
 
       touchEvent(window, 'touchmove', 100, 95);
-      assert.equal(this.list.style.transform, 'translateY(-5px)');
+      assert.equal(this.list.scrollTop, 5);
 
       touchEvent(window, 'touchmove', 100, 90);
-      assert.equal(this.list.style.transform, 'translateY(-10px)');
+      assert.equal(this.list.scrollTop, 10);
 
       touchEvent(window, 'touchmove', 100, 85);
-      assert.equal(this.list.style.transform, 'translateY(-15px)');
+      assert.equal(this.list.scrollTop, 15);
 
       touchEvent(window, 'touchmove', 100, 80);
-      assert.equal(this.list.style.transform, 'translateY(-20px)');
+      assert.equal(this.list.scrollTop, 20);
     });
 
     test('It recognises quick taps (> 180ms)', function() {
@@ -97,71 +109,63 @@ suite('GaiaPicker', function() {
 
       var callback = sinon.spy();
 
-      this.list.addEventListener('tap', callback);
+      this.outer.addEventListener('tap', callback);
 
-      touchEvent(this.list, 'touchstart', 100, 100);
+      touchEvent(this.inner, 'touchstart', 100, 100);
       clock.tick(100);
-      touchEvent(this.list, 'touchend', 100, 100);
+      touchEvent(this.inner, 'touchend', 100, 100);
       sinon.assert.called(callback);
       callback.reset();
 
-      touchEvent(this.list, 'touchstart', 100, 100);
-      clock.tick(150);
-      touchEvent(this.list, 'touchend', 100, 100);
+      touchEvent(this.inner, 'touchstart', 100, 100);
+      clock.tick(140);
+      touchEvent(this.inner, 'touchend', 100, 100);
       sinon.assert.called(callback);
       callback.reset();
 
-      touchEvent(this.list, 'touchstart', 100, 100);
+      touchEvent(this.inner, 'touchstart', 100, 100);
       clock.tick(250);
-      touchEvent(this.list, 'touchend', 100, 100);
+      touchEvent(this.inner, 'touchend', 100, 100);
       sinon.assert.notCalled(callback);
     });
 
     test('It doesn\'t scroll past the top of the list', function() {
-      touchEvent(this.list, 'touchstart', 100, 100);
+      touchEvent(this.inner, 'touchstart', 100, 100);
       touchEvent(window, 'touchmove', 100, 95);
-      assert.equal(this.scroll.scrollTop, 5);
+      assert.equal(this.list.scrollTop, 5);
       touchEvent(window, 'touchmove', 100, 90);
-      assert.equal(this.scroll.scrollTop, 10);
+      assert.equal(this.list.scrollTop, 10);
       touchEvent(window, 'touchmove', 100, 110);
-      assert.equal(this.scroll.scrollTop, 0);
+      assert.equal(this.list.scrollTop, 0);
     });
 
     test('It doesn\'t scroll past the bottom of the list', function() {
-      var max = this.list.clientHeight - this.list.parentNode.clientHeight;
+      var max = (this.list.length * this.list.heights.item) - this.outer.clientHeight;
 
-      this.scroll.scrollTo(max - 40);
-      assert.equal(this.scroll.scrollTop, max - 40);
+      this.list.scrollDelta(max - 40);
+      assert.equal(this.list.scrollTop, max - 40);
 
-      touchEvent(this.list, 'touchstart', 100, 100);
+      touchEvent(this.inner, 'touchstart', 100, 100);
       touchEvent(window, 'touchmove', 100, 90);
-      assert.equal(this.scroll.scrollTop, max - 30);
+      assert.equal(this.list.scrollTop, max - 30);
       touchEvent(window, 'touchmove', 100, 70);
-      assert.equal(this.scroll.scrollTop, max - 10);
+      assert.equal(this.list.scrollTop, max - 10);
       touchEvent(window, 'touchmove', 100, 50);
 
-      assert.equal(this.scroll.scrollTop, max, 'didn\'t exceed scroll height');
+      assert.equal(this.list.scrollTop, max, 'didn\'t exceed scroll height');
     });
   });
 
   suite('speed', function() {
-    setup(function() {
-      this.scroll = new SnapScroll({
-        list: this.list,
-        caf: this.caf,
-        raf: this.raf
-      });
-    });
-
     test('It drifts further if movement was faster', function() {
       clock = sinon.useFakeTimers();
 
       var slow = {
-        start: this.scroll.scrollTop,
+        start: this.list.scrollTop,
         interval: 20
       };
 
-      touchEvent(this.list, 'touchstart', 100, 100);
+      touchEvent(this.inner, 'touchstart', 100, 100);
       touchEvent(window, 'touchmove', 100, 95);
       clock.tick(slow.interval);
       touchEvent(window, 'touchmove', 100, 90);
@@ -173,14 +177,14 @@ suite('GaiaPicker', function() {
       touchEvent(window, 'touchend', 100, 75);
       clock.tick(slow.interval);
 
-      slow.distance = this.scroll.scrollTop - slow.start;
+      slow.distance = this.list.scrollTop - slow.start;
 
       var fast = {
-        start: this.scroll.scrollTop,
+        start: this.list.scrollTop,
         interval: 10
       };
 
-      touchEvent(this.list, 'touchstart', 100, 100);
+      touchEvent(this.inner, 'touchstart', 100, 100);
       touchEvent(window, 'touchmove', 100, 95);
       clock.tick(fast.interval);
       touchEvent(window, 'touchmove', 100, 90);
@@ -191,7 +195,7 @@ suite('GaiaPicker', function() {
       clock.tick(fast.interval);
       touchEvent(window, 'touchend', 100, 75);
 
-      fast.distance = this.scroll.scrollTop - fast.start;
+      fast.distance = this.list.scrollTop - fast.start;
 
       assert.isTrue(fast.distance > slow.distance, 'the faster swipe travelled further');
     });
@@ -199,57 +203,129 @@ suite('GaiaPicker', function() {
 
   suite('circular', function() {
     setup(function() {
-      this.scroll = new SnapScroll({
-        list: this.list,
-        caf: this.caf,
-        raf: this.raf,
-        circular: true
-      });
-    });
-
-    test('It duplicates the list contents above and below', function() {
-      var clones = this.list.querySelectorAll('div');
-      assert.equal(clones[0].children.length, 12);
-      assert.equal(clones[1].children.length, 12);
+      this.list.config.circular = true;
+      this.list.refresh();
     });
 
     test('It when the scrollTop is < 0 jump to the bottom', function() {
+      var scrollHeight = this.list.length * this.list.heights.item;
 
-      touchEvent(this.list, 'touchstart', 100, 100);
+      touchEvent(this.inner, 'touchstart', 100, 100);
 
-      assert.equal(this.scroll.scrollTop, 0);
+      assert.equal(this.list.scrollTop, 0);
 
       touchEvent(window, 'touchmove', 100, 95);
 
-      assert.equal(this.scroll.scrollTop, 5);
+      assert.equal(this.list.scrollTop, 5);
 
       touchEvent(window, 'touchmove', 100, 90);
 
-      assert.equal(this.scroll.scrollTop, 10);
+      assert.equal(this.list.scrollTop, 10);
 
       touchEvent(window, 'touchmove', 100, 95);
       touchEvent(window, 'touchmove', 100, 100);
       touchEvent(window, 'touchmove', 100, 105);
 
-      assert.equal(this.scroll.scrollTop, this.list.clientHeight - 5,
+      assert.equal(this.list.scrollTop, scrollHeight - 5,
         'It jumps to the bottom of the list when it exceeds the scroll bounds');
     });
 
     test('It jumps to the top when the list scrolls off the top', function() {
-      var start = this.list.clientHeight - 30;
+      var scrollHeight = this.list.length * this.list.heights.item;
+      var start = (this.list.length * this.list.heights.item) - 30;
 
       // Start at the bottom of the list
-      this.scroll.scrollTo(start);
+      this.list.scrollDelta(start);
 
-      assert.equal(this.scroll.scrollTop, start);
+      assert.equal(this.list.scrollTop, start);
 
-      touchEvent(this.list, 'touchstart', 100, 100);
+      touchEvent(this.inner, 'touchstart', 100, 100);
       touchEvent(window, 'touchmove', 100, 80);
       touchEvent(window, 'touchmove', 100, 70);
       touchEvent(window, 'touchmove', 100, 60);
 
-      assert.equal(this.scroll.scrollTop, 10,
+      assert.equal(this.list.scrollTop, 10,
         'It jumps to the top of the list');
+    });
+  });
+
+  suite('rendering', function() {
+    setup(function() {
+      var listPos = this.outer.getBoundingClientRect();
+      this.topItemContent = function() {
+        return document.elementFromPoint(listPos.left + 10, listPos.top + 10).textContent;
+      };
+    });
+
+    test('The first list item is at the top', function() {
+      assert.equal(this.topItemContent(), 'January');
+    });
+
+    test('The first item in the list updates as panning', function() {
+      clock = sinon.useFakeTimers();
+      this.list.config.circular = true;
+
+      var interval = 1000;
+
+      touchEvent(this.inner, 'touchstart', 100, 200);
+      clock.tick(interval);
+      touchEvent(window, 'touchmove', 100, 160);
+      assert.equal(this.topItemContent(), 'February');
+      clock.tick(interval);
+      touchEvent(window, 'touchmove', 100, 120);
+      assert.equal(this.topItemContent(), 'March');
+      clock.tick(interval);
+      touchEvent(window, 'touchmove', 100, 80);
+      assert.equal(this.topItemContent(), 'April');
+      clock.tick(interval);
+      touchEvent(window, 'touchmove', 100, 40);
+      assert.equal(this.topItemContent(), 'May');
+      clock.tick(interval);
+      touchEvent(window, 'touchmove', 100, 0);
+      assert.equal(this.topItemContent(), 'June');
+      clock.tick(interval);
+      touchEvent(window, 'touchend', 100, 0);
+      clock.tick(interval);
+
+      touchEvent(this.inner, 'touchstart', 100, 200);
+      clock.tick(interval);
+      touchEvent(window, 'touchmove', 100, 160);
+      assert.equal(this.topItemContent(), 'July');
+      clock.tick(interval);
+      touchEvent(window, 'touchmove', 100, 120);
+      assert.equal(this.topItemContent(), 'August');
+      clock.tick(interval);
+      touchEvent(window, 'touchmove', 100, 80);
+      assert.equal(this.topItemContent(), 'September');
+      clock.tick(interval);
+      touchEvent(window, 'touchmove', 100, 40);
+      assert.equal(this.topItemContent(), 'October');
+      clock.tick(interval);
+      touchEvent(window, 'touchmove', 100, 0);
+      assert.equal(this.topItemContent(), 'November');
+      clock.tick(interval);
+      touchEvent(window, 'touchend', 100, 0);
+      clock.tick(interval);
+
+      touchEvent(this.inner, 'touchstart', 100, 200);
+      clock.tick(interval);
+      touchEvent(window, 'touchmove', 100, 160);
+      assert.equal(this.topItemContent(), 'December');
+      clock.tick(interval);
+      touchEvent(window, 'touchmove', 100, 120);
+      assert.equal(this.topItemContent(), 'January');
+      clock.tick(interval);
+      touchEvent(window, 'touchmove', 100, 80);
+      assert.equal(this.topItemContent(), 'February');
+      clock.tick(interval);
+      touchEvent(window, 'touchmove', 100, 40);
+      assert.equal(this.topItemContent(), 'March');
+      clock.tick(interval);
+      touchEvent(window, 'touchmove', 100, 0);
+      assert.equal(this.topItemContent(), 'April');
+      clock.tick(interval);
+      touchEvent(window, 'touchend', 100, 0);
+      clock.tick(interval);
     });
   });
 

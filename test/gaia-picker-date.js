@@ -103,7 +103,7 @@ suite('GaiaPickerDate', function() {
 
   test('It only shows months in the given range', function() {
     var el = create('', '2014-07-01', '2014-05-01');
-    var months = el.els.pickers.month.children;
+    var months = el.els.pickers.month.items;
     assert.equal(months.length, 3);
   });
 
@@ -135,10 +135,16 @@ suite('GaiaPickerDate', function() {
         };
       };
 
+      clock = sinon.useFakeTimers();
+
       var el = create('2014-10-22');
-      assert.equal(el.els.pickers.year.children[0].textContent, 'localized-full-year');
-      assert.equal(el.els.pickers.month.children[0].textContent, 'localized-short-month');
-      assert.equal(el.els.pickers.day.children[0].textContent, 'localized-date');
+
+      // // Tick past picker setup timeout
+      clock.tick(1);
+
+      assert.equal(el.els.pickers.year.value, 'localized-full-year');
+      assert.equal(el.els.pickers.month.value, 'localized-short-month');
+      assert.equal(el.els.pickers.day.value, 'localized-date');
 
       delete navigator.mozL10n.DateTimeFormat;
     });
@@ -362,7 +368,7 @@ suite('GaiaPickerDate', function() {
       // async listeners are bound
       clock.tick(1);
 
-      var e = new CustomEvent('changed', { detail: { value: 2011 }});
+      var e = new CustomEvent('changed', { detail: { index: 1 }});
       el.els.pickers.year.dispatchEvent(e);
 
       assert.equal(el.value.getFullYear(), 2011);

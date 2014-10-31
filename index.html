@@ -15,18 +15,29 @@
   <style>
 
   .simple-list {
+    position: relative;
+    margin-top: 150px;
     padding: 0;
-    height: 300px;
+    height: 200px;
     overflow: hidden;
-    box-shadow: inset 0 1px 4px rgba(0,0,0,0.1);
+    box-shadow: inset 0 0px 3px rgba(0,0,0,0.3);
   }
 
   .simple-list li {
     position: relative;
     list-style-type: none;
     line-height: 40px;
-    height: 40px;
+    height: 50px;
     padding: 0 1rem;
+    background: rgba(0,0,0,0.2);
+  }
+
+  .simple-list_inner {
+    position: absolute;
+    top: 50%; left: 0;
+    width: 100%;
+    margin-top: -25px;
+    will-change: transform;
   }
 
   .simple-list_inner > li {
@@ -42,15 +53,6 @@
     background: var(--border-color);
   }
 
-  .test {
-    position: absolute;
-    left: 0; top: 0;
-    width: 100px;
-    height: 100px;
-    margin: -50px;
-    background: red;
-  }
-
   </style>
 </head>
 
@@ -58,8 +60,6 @@
   <gaia-theme-selector></gaia-theme-selector>
 
   <h1 class="large l-align-center l-mb-small">&lt;gaia-picker&gt;</h1>
-
-  <div class="test" id="test"></div>
 
 <!--   <ul class="simple-list">
     <div class="simple-list_inner">
@@ -78,30 +78,21 @@
     </div>
   </ul> -->
 
-<!--   <gaia-picker circular style="height:300px">
-    <li>January</li>
-    <li>February</li>
-    <li>March</li>
-    <li>April</li>
-    <li>May</li>
-    <li>June</li>
-    <li>July</li>
-    <li>August</li>
-    <li>September</li>
-    <li>October</li>
-    <li>November</li>
-    <li>December</li>
-  </gaia-picker> -->
+  <ul class="simple-list" id="recyclelist">
+    <div class="simple-list_inner" id="recyclelistinner"></div>
+  </ul>
 
-  <!-- <gaia-picker-date style="height:200px"></gaia-picker-date> -->
+  <!-- <gaia-picker circular style="height:300px"></gaia-picker> -->
+
+  <gaia-picker-date></gaia-picker-date>
 
 <!--   <gaia-picker-date
     style="height:200px"
     min="1967-05-02"
     max="2024-12-31"
     value="2000-03-31">
-  </gaia-picker-date>
-
+  </gaia-picker-date> -->
+<!--
   <gaia-picker-date
     style="height:200px"
     min="2014-05-01"
@@ -114,29 +105,65 @@
     max="2015-03-01">
   </gaia-picker-date> -->
 
-  <!-- <gaia-picker-time format="12hr" style="height:200px"></gaia-picker-time> -->
-  <!-- <gaia-picker-time style="height:200px"></gaia-picker-time> -->
+  <gaia-picker-time format="12hr" style="height:200px"></gaia-picker-time>
+  <gaia-picker-time style="height:200px"></gaia-picker-time>
 
   <script>
 
-  var frame;
-  var el = test;
-  addEventListener('touchmove', function(e) {
-    frame = frame || requestAnimationFrame(function() {
-      var touch = e.touches[0];
-      frame = null;
-      el.style.transform = 'translate(' + touch.pageX + 'px,' + touch.pageY + 'px)';
-      el.textContent = touch.pageY;
-    });
-  });
+  // var frame;
+  // var el = test;
+  // addEventListener('touchmove', function(e) {
+  //   frame = frame || requestAnimationFrame(function() {
+  //     var touch = e.touches[0];
+  //     frame = null;
+  //     el.style.transform = 'translate(' + touch.pageX + 'px,' + touch.pageY + 'px)';
+  //     el.textContent = touch.pageY;
+  //   });
+  // });
 
   var Scroll = window['snap-scroll'];
 
-  // var scroll = new Scroll({
-  //   list: document.querySelector('.simple-list_inner'),
-  //   circular: true,
-  //   snap: true,
-  // });
+  var items = [
+    'January',
+    'February',
+    'March',
+    'April',
+    'May',
+    'June',
+    'July',
+    'August',
+    'September',
+    'October',
+    'November',
+    'December'
+  ];
+
+  var list = new Scroll({
+    outer: recyclelist,
+    inner: recyclelist.firstElementChild, // optional
+    length: 12,
+    // circular: true,
+    // snap: true,
+    heights: {
+      outer: 200,
+      item: 50
+    },
+    render: function(el, index, offsetIndex) {
+      var value = items[index];
+
+      if (!value) el.style.opacity = 0;
+      else el.style.opacity = '';
+
+      el.textContent = items[index];
+    }
+  });
+
+  list.heights.scroll += list.heights.outer - list.heights.item;
+  list.refresh();
+
+  // var picker = document.querySelector('gaia-picker');
+  // picker.items = items;
+
   </script>
 </body>
 </html>
