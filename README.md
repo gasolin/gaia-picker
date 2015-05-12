@@ -1,4 +1,4 @@
-# &lt;gaia-picker&gt; [![](https://travis-ci.org/gaia-components/gaia-picker.svg)](https://travis-ci.org/gaia-components/gaia-picker)
+# &lt;gaia-picker&gt; [![](https://travis-ci.org/gaia-components/gaia-picker.svg)](https://travis-ci.org/gaia-components/gaia-picker) [![devDependency Status](https://david-dm.org/gaia-components/gaia-picker/dev-status.svg)](https://david-dm.org/gaia-components/gaia-picker#info=devDependencies)
 
 ## Installation
 
@@ -10,6 +10,29 @@ $ bower install gaia-components/gaia-picker
 
 - [Example](http://gaia-components.github.io/gaia-picker/)
 
+## Usage
+
+### `gaia-picker-time`
+
+24 hours format
+
+```
+<gaia-picker-time></gaia-picker-time>
+```
+
+12 hours format
+
+```
+<gaia-picker-time format="12hr"></gaia-picker-time>
+```
+
+### `gaia-picker-date`
+
+```
+<gaia-picker-date></gaia-picker-date>
+```
+
+
 ## Tests
 
 1. Ensure Firefox Nightly is installed on your machine.
@@ -19,3 +42,9 @@ $ bower install gaia-components/gaia-picker
 If your would like tests to run on file change use:
 
 `$ npm run test-dev`
+
+## Lint check
+
+Run lint check with command:
+
+`$ npm run lint`

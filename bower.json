@@ -17,10 +17,9 @@
     "package.json",
     "README.md"
   ],
-  "dependencies": {},
   "devDependencies": {
-    "gaia-theme": "gaia-components/gaia-theme#~0.4.1",
-    "gaia-fonts": "gaia-components/gaia-fonts#~0.2.1",
+    "gaia-theme": "gaia-components/gaia-theme",
+    "gaia-fonts": "gaia-components/gaia-fonts",
     "base": "gaia-components/base"
   }
 }

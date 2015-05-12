@@ -3,16 +3,21 @@ language: node_js
 node_js:
   - '0.10'
 
-env:
-  - TEST_SUITE=unit
-
 install:
   - npm install
-  - ./node_modules/.bin/mozilla-download ./firefox/ --branch=nightly --channel=prerelease
-  - export FIREFOX_NIGHTLY_BIN="./firefox/firefox-bin"
+  - ./node_modules/.bin/mozilla-download ./firefox/ --product firefox --branch mozilla-central
+  - export FIREFOX_NIGHTLY_BIN="./firefox/firefox/firefox-bin"
 
 before_script:
   - export DISPLAY=:99.0
   - sh -e /etc/init.d/xvfb start
 
-script: "npm test"
+script:
+  - $CI_ACTION
+
+env:
+  global:
+    - TEST_SUITE=unit
+  matrix:
+    - CI_ACTION="npm run lint"
+    - CI_ACTION="npm test"
